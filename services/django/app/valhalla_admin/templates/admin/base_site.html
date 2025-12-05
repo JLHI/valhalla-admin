@@ -1,0 +1,34 @@
+{% extends "admin/base.html" %}
+
+{# --- BANDEAU BLEU : TITRE / BRANDING --- #}
+{% block branding %}
+<h1 id="site-name">
+
+    {% if request.user.is_superuser %}
+        {# Superuser : toujours un lien vers l’admin #}
+        <a href="{% url 'admin:index' %}">{{ SITEWEBNAME }}</a>
+
+    {% else %}
+        {# Staff : jamais de lien #}
+        {{ SITEWEBNAME }}
+    {% endif %}
+
+</h1>
+{% endblock %}
+
+
+{# --- FIL D'ARIANE (BREADCRUMB) --- #}
+{% block breadcrumbs %}
+
+    {% if request.path == "/" %}
+        {# Sur la page d'accueil : on force un breadcrumb personnalisé #}
+        <div class="breadcrumbs">
+            <a href="/">Accueil</a>
+        </div>
+
+    {% else %}
+        {# Pour le reste : breadcrumb admin normal #}
+        {{ block.super }}
+    {% endif %}
+
+{% endblock %}

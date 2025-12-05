@@ -1,0 +1,94 @@
+{% extends "home.html" %}
+
+{% block inner_content %}
+
+<h1>Liste complète des GTFS France</h1>
+
+{% if error %}
+    <div style="color:red;">Erreur : {{ error }}</div>
+{% endif %}
+
+<p>{{ count }} jeux de données trouvés</p>
+<style>
+
+td, th {
+    font-size: 0.8125rem;
+    line-height: 1rem;
+    border-bottom: 1px solid var(--hairline-color);
+    vertical-align: top;
+    padding: 8px;
+    max-width: 30vw;
+}
+</style>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Titre</th>
+            <th>Éditeur</th>
+            <th>Mis à jour</th>
+            <th>Dataset</th>
+            <th>Lien GTFS</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+
+    <tbody>
+    {% for item in items %}
+        <tr>
+            <!-- Titre -->
+            <td>{{ item.title }}</td>
+
+            <!-- Éditeur -->
+            <td>
+                {% if item.publisher %}
+                    {{ item.publisher }}
+                {% else %}
+                    (Indisponible)
+                {% endif %}
+            </td>
+
+            <!-- Date de mise à jour -->
+            <td>
+                {% if item.gtfs_modified %}
+                    {{ item.gtfs_modified|date:"Y-m-d" }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+
+           
+
+            <!-- Lien vers dataset -->
+            <td>
+                {% if item.landing_page %}
+                    <a href="{{ item.landing_page }}" target="_blank">Voir dataset</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+
+            <!-- Lien GTFS -->
+            <td>
+                {% if item.gtfs_url %}
+                    <a href="{{ item.gtfs_url }}" target="_blank">Télécharger</a>
+                {% else %}
+                    Aucun lien
+                {% endif %}
+            </td>
+
+            <!-- Action -->
+            <td>
+                {% if item.exists %}
+                    ✔️ Déjà importé
+                {% else %}
+                    <a href="/admin/add-gtfs-eu/?url={{ item.gtfs_url }}&name={{ item.title }}">
+                        ➕ Ajouter
+                    </a>
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

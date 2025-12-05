@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'valhalla_admin/home.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<div class="custom-sidebar">
+
+    {% if request.user.is_superuser %}
+    <div class="menu-group">
+        <h3>Administration</h3>
+        <a href="/">Tableau de bord</a>
+        <a href="/gtfs/list/">Liste GTFS</a>
+        <a href="/admin/app/RebuildGraph/">Reconstruire le graph</a>
+    </div>
+    {% endif %}
+
+    {% if request.user.is_staff %}
+    <div class="menu-group">
+        <h3>Espace Staff</h3>
+        <a href="/gtfs/list/">Liste GTFS</a>
+        <a href="/admin/app/GtfsSource/add/">Ajouter une source</a>
+    </div>
+    {% endif %}
+
+    <div class="menu-group">
+    <h3>Compte</h3>
+
+    <a href="{% url 'admin:password_change' %}">Changer le mot de passe</a>
+
+    <form action="{% url 'admin:logout' %}" method="post" style="margin:0; padding:0;">
+        {% csrf_token %}
+        <button type="submit"
+                style="background:none;border:none;padding:0;color:#0c4b33;cursor:pointer;text-align:left;">
+            Déconnexion
+        </button>
+    </form>
+</div>
+
+</div>
+
+<div class="dashboard-content">
+
+    {% block inner_content %}
+        <h1>Bienvenue {{ request.user.username }}</h1>
+
+        <h2>État du système</h2>
+
+        <div class="widgets-container">
+            {% for module in modules %}
+                <div class="module widget-card">
+                    <h3>{{ module.title }}</h3>
+                    <p>{{ module.content|safe }}</p>
+                </div>
+            {% empty %}
+                <p>Aucun widget n'est enregistré.</p>
+            {% endfor %}
+        </div>
+
+        {% if request.user.is_superuser %}
+            <h2>Espace Administrateur</h2>
+            <p>Vous avez un accès complet.</p>
+        {% endif %}
+    {% endblock %}
+
+</div>
+
+{% endblock %}

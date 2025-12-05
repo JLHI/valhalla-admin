@@ -1,0 +1,18 @@
+{
+  "mjolnir": {
+    "tile_dir": "/data/tiles/valhalla",
+    "tile_extract": "/data/tiles/valhalla_tiles.tar",
+    "timezone": "/data/tiles/tz.sqlite",
+    "transit_dir": "/data/tiles/transit_tiles",
+    "transit_feeds_dir": "/data/tiles/transit-feeds"
+  },
+  "httpd": {
+    "service": {
+      "listen": "tcp://*:8002",
+      "timeout_seconds": -1
+    }
+  },
+  "additional_data": {
+    "elevation": "/data/tiles/elevation/"
+  }
+}
