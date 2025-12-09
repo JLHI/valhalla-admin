@@ -16,8 +16,16 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(max_length=255)),
+                ('source_id', models.CharField(help_text='Identifiant EU du dataset', max_length=255, unique=True)),
                 ('url', models.URLField()),
+                ('publisher', models.CharField(blank=True, max_length=255, null=True)),
+                ('landing_page', models.URLField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('gtfs_modified', models.DateTimeField(blank=True, null=True)),
+                ('is_active', models.BooleanField(default=True)),
             ],
+            options={
+                'ordering': ['-created_at'],
+            },
         ),
     ]

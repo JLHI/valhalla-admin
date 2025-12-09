@@ -88,3 +88,66 @@ def eu_gtfs_france(request):
         "title": "GTFS France (EU Portal)",
         "content": content
     }
+
+@register_widget
+def manage_graphs(request):
+    # 1. Récupérer les GTFS en base
+    gtfs_sources = GtfsSource.objects.all().order_by("name")
+
+    # 2. Récupérer les fichiers OSM disponibles
+    import os
+    OSM_DIR = "/data/osm"   # à ajuster
+    osm_files = []
+    try:
+        if os.path.exists(OSM_DIR):
+            for f in os.listdir(OSM_DIR):
+                if f.endswith(".pbf"):
+                    path = os.path.join(OSM_DIR, f)
+                    size = os.path.getsize(path)
+                    osm_files.append({
+                        "name": f,
+                        "size": round(size / 1024 / 1024, 1),  # MB
+                        "path": path,
+                    })
+    except Exception as e:
+        osm_files = [{"name": "Erreur lecture OSM", "size": 0}]
+
+    # 3. Générer un HTML simple à afficher dans le widget
+    html = "<div>"
+
+    html += "<h4>GTFS disponibles</h4>"
+    html += "<ul>"
+    for g in gtfs_sources:
+        html += f"""
+            <li>
+                <input type='checkbox' name='gtfs' value='{g.source_id}'>
+                <strong>{g.name}</strong>
+                <small>({g.source_id})</small>
+            </li>
+        """
+    html += "</ul>"
+
+    html += "<h4>OSM disponibles</h4>"
+    html += "<ul>"
+    for osm in osm_files:
+        html += f"""
+            <li>
+                <input type='checkbox' name='osm' value='{osm["name"]}'>
+                {osm["name"]} - {osm["size"]} MB
+            </li>
+        """
+    html += "</ul>"
+
+    # Bouton qui appelle une route Django pour créer une BuildTask
+    html += """
+        <button onclick="window.location='/build/graph/start/'">
+             Construire un graphe Valhalla
+        </button>
+    """
+
+    html += "</div>"
+
+    return {
+        "title": "Gérer les graphes Valhalla",
+        "content": html
+    }

@@ -9,8 +9,50 @@
 {% endif %}
 
 <p>{{ count }} jeux de données trouvés</p>
-<style>
 
+<style>
+.error-tooltip {
+    position: relative;
+    cursor: help;
+}
+
+.error-tooltip::after {
+    content: attr(data-error);
+    position: absolute;
+    left: 0;
+    bottom: 125%;
+    background: #b00020;
+    color: white;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 999;
+}
+
+.error-tooltip:hover::after {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #ccc;
+    border-top-color: #555;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
 td, th {
     font-size: 0.8125rem;
     line-height: 1rem;
@@ -19,26 +61,57 @@ td, th {
     padding: 8px;
     max-width: 30vw;
 }
+
+th {
+    cursor: pointer;
+    background-color: #f5f5f5;
+    user-select: none;
+}
+
+th:hover {
+    background-color: #e0e0e0;
+}
+
+th.sortable::after {
+    content: " ⇅";
+    font-size: 0.8em;
+}
+
+th.sort-asc::after {
+    content: " ▲";
+}
+
+th.sort-desc::after {
+    content: " ▼";
+}
+.action-cell{
+    cursor:pointer;
+}
 </style>
-<table class="table">
+
+<table class="table" id="gtfs-table">
     <thead>
         <tr>
-            <th>Titre</th>
-            <th>Éditeur</th>
-            <th>Mis à jour</th>
-            <th>Dataset</th>
-            <th>Lien GTFS</th>
-            <th>Action</th>
+            <th data-column="0">Titre</th>
+            <th data-column="1">Éditeur</th>
+            <th data-column="2">Mis à jour</th>
+            <th data-column="4">Lien GTFS</th>
+            <th data-column="5">Action</th>
         </tr>
     </thead>
 
     <tbody>
     {% for item in items %}
-        <tr>
-            <!-- Titre -->
+        <tr 
+            data-source-id="{{ item.source_id }}"
+            data-title="{{ item.title }}"
+            data-url="{{ item.gtfs_url }}"
+            data-publisher="{{ item.publisher }}"
+            data-landing="{{ item.landing_page }}"
+            data-modified="{{ item.gtfs_modified|date:'c' }}"
+        >
             <td>{{ item.title }}</td>
 
-            <!-- Éditeur -->
             <td>
                 {% if item.publisher %}
                     {{ item.publisher }}
@@ -47,8 +120,7 @@ td, th {
                 {% endif %}
             </td>
 
-            <!-- Date de mise à jour -->
-            <td>
+            <td data-sort-value="{% if item.gtfs_modified %}{{ item.gtfs_modified|date:'Y-m-d' }}{% else %}9999-12-31{% endif %}">
                 {% if item.gtfs_modified %}
                     {{ item.gtfs_modified|date:"Y-m-d" }}
                 {% else %}
@@ -56,18 +128,7 @@ td, th {
                 {% endif %}
             </td>
 
-           
-
-            <!-- Lien vers dataset -->
-            <td>
-                {% if item.landing_page %}
-                    <a href="{{ item.landing_page }}" target="_blank">Voir dataset</a>
-                {% else %}
-                    -
-                {% endif %}
-            </td>
-
-            <!-- Lien GTFS -->
+          
             <td>
                 {% if item.gtfs_url %}
                     <a href="{{ item.gtfs_url }}" target="_blank">Télécharger</a>
@@ -76,12 +137,15 @@ td, th {
                 {% endif %}
             </td>
 
-            <!-- Action -->
-            <td>
+            <td class="action-cell">
                 {% if item.exists %}
-                    ✔️ Déjà importé
+                    <a class="gtfs-remove"
+                       data-url="/gtfs/remove/?source_id={{ item.source_id }}">
+                        ➖ Retirer
+                    </a>
                 {% else %}
-                    <a href="/admin/add-gtfs-eu/?url={{ item.gtfs_url }}&name={{ item.title }}">
+                    <a class="gtfs-add"
+                       data-url="/admin/add-gtfs-eu/?source_id={{ item.source_id }}&url={{ item.gtfs_url }}&name={{ item.title }}&publisher={{ item.publisher }}&landing_page={{ item.landing_page }}&gtfs_modified={{ item.gtfs_modified|date:'c' }}">
                         ➕ Ajouter
                     </a>
                 {% endif %}
@@ -90,5 +154,116 @@ td, th {
     {% endfor %}
     </tbody>
 </table>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    /* === TRI DU TABLEAU === */
+    const table = document.getElementById("gtfs-table");
+    const headers = table.querySelectorAll("th[data-column]");
+    const saved = JSON.parse(localStorage.getItem("gtfs-table-sort") || "{}");
+    let current = { column: saved.column ?? 0, asc: saved.asc ?? true };
+
+    headers.forEach(header => {
+        header.classList.add("sortable");
+        header.addEventListener("click", () => {
+            const col = parseInt(header.dataset.column);
+            const asc = (current.column === col ? !current.asc : true);
+            sortTable(col, asc);
+
+            headers.forEach(h => h.classList.remove("sort-asc", "sort-desc"));
+            header.classList.add(asc ? "sort-asc" : "sort-desc");
+
+            current = { column: col, asc };
+            localStorage.setItem("gtfs-table-sort", JSON.stringify(current));
+        });
+    });
+
+    function sortTable(col, asc) {
+        const tbody = table.querySelector("tbody");
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+
+        rows.sort((a, b) => {
+            let av = a.cells[col].dataset.sortValue || a.cells[col].innerText.trim();
+            let bv = b.cells[col].dataset.sortValue || b.cells[col].innerText.trim();
+
+            const anum = parseFloat(av);
+            const bnum = parseFloat(bv);
+
+            if (!isNaN(anum) && !isNaN(bnum))
+                return asc ? anum - bnum : bnum - anum;
+
+            return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+        });
+
+        rows.forEach(r => tbody.appendChild(r));
+    }
+
+    sortTable(current.column, current.asc);
+
+    /* ===============================================================
+       ===============   AJAX ADD & REMOVE (PRO)   ====================
+       ============================================================== */
+
+    const tbody = document.querySelector("#gtfs-table tbody");
+
+    function buildAddUrl(row) {
+        const sid = row.dataset.sourceId;
+        const url = encodeURIComponent(row.dataset.url || "");
+        const title = encodeURIComponent(row.dataset.title || "");
+        const pub = encodeURIComponent(row.dataset.publisher || "");
+        const landing = encodeURIComponent(row.dataset.landing || "");
+        const modified = encodeURIComponent(row.dataset.modified || "");
+        return `/admin/add-gtfs-eu/?source_id=${sid}&url=${url}&name=${title}&publisher=${pub}&landing_page=${landing}&gtfs_modified=${modified}`;
+    }
+
+    tbody.addEventListener("click", async function (e) {
+        const btn = e.target.closest("a");
+        if (!btn) return;
+
+        const row = btn.closest("tr");
+        const cell = btn.closest("td");
+        const url = btn.dataset.url;
+
+        if (!url) return;
+
+        e.preventDefault();
+        btn.innerHTML = `<span class="loading-spinner"></span>`;
+        btn.classList.add("disabled");
+        try {
+            const res = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+            const json = await res.json();
+
+            if (json.status === "created") {
+                cell.innerHTML = `
+                    <a class="gtfs-remove"
+                       data-url="/gtfs/remove/?source_id=${row.dataset.sourceId}">
+                        ➖ Retirer
+                    </a>
+                `;
+            } 
+            else if (json.status === "deleted") {
+                cell.innerHTML = `
+                    <a class="gtfs-add"
+                       data-url="${buildAddUrl(row)}">
+                        ➕ Ajouter
+                    </a>
+                `;
+            }
+            else {
+                btn.textContent = "⚠️ Erreur";
+            }
+
+        } catch (err) {
+            console.error(err);
+            cell.innerHTML = `
+    <span class="error-tooltip" data-error="${(err.message || 'Erreur inconnue').replace(/"/g, '&quot;')}">
+        ❌ Erreur
+    </span>
+`;      }
+    });
+
+});
+</script>
 
 {% endblock %}

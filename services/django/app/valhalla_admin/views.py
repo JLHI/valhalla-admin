@@ -9,7 +9,6 @@ def home(request):
     modules = [widget(request) for widget in HOME_WIDGETS]
     return render(request, "home.html", {"modules": modules})
 
-
 class AdminLogin(LoginView):
     template_name = "admin/login.html"  # utiliser le thème admin
     redirect_authenticated_user = True
@@ -17,4 +16,3 @@ class AdminLogin(LoginView):
     def get_success_url(self):
         # Toujours rediriger vers /
         return "/"
-    

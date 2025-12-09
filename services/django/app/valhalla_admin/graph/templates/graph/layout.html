@@ -1,0 +1,49 @@
+{% extends "home.html" %}
+
+{% block inner_content %}
+
+<style>
+.graph-nav {
+    display: flex;
+    gap: 1rem;
+    background: #f2f2f2;
+    padding: 10px;
+    margin-bottom: 20px;
+    border-radius: 6px;
+}
+
+.graph-nav a {
+    padding: 8px 14px;
+    border-radius: 4px;
+    text-decoration: none;
+    background: #e8e8e8;
+    color: #333;
+    font-weight: 500;
+}
+
+.graph-nav a.active {
+    background: #007bff;
+    color: white;
+}
+</style>
+
+<div class="graph-nav">
+    <a href="/graphs/" class="{% if section == 'dashboard' %}active{% endif %}">
+        📊 Dashboard
+    </a>
+
+    <a href="/graphs/list/" class="{% if section == 'list' %}active{% endif %}">
+        📂 Liste des graphes
+    </a>
+
+    <a href="/graphs/create/" class="{% if section == 'create' %}active{% endif %}">
+        🛠️ Création de graphe
+    </a>
+</div>
+
+<div>
+    {% block graph_content %}
+    {% endblock %}
+</div>
+
+{% endblock %}

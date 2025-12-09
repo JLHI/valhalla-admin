@@ -1,0 +1,42 @@
+{% extends "graph/layout.html" %}
+{% block graph_content %}
+
+<h2>Création d’un graphe Valhalla</h2>
+
+<form action="/graphs/create/" method="post">
+    {% csrf_token %}
+
+    <h3>Sélection des GTFS</h3>
+    <p>GTFS importés dans la base :</p>
+    <ul>
+        {% for g in gtfs %}
+            <li>
+                <label>
+                    <input type="checkbox" name="gtfs" value="{{ g.id }}">
+                    {{ g.name }}
+                </label>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <h3>Sélection du fichier OSM</h3>
+    <p>OSM disponibles :</p>
+    <ul>
+        {% for osm in osm_catalog %}
+            <li>
+            <label>
+                <input type="radio" name="osm" value="{{ osm.url }}">
+                {{ osm.region }} — {{ osm.size }} MB
+            </label>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <h3>Nom du graphe</h3>
+    <input type="text" name="graph_name" placeholder="ex: aura_2025" required>
+
+    <br><br>
+    <button class="btn btn-primary">🚀 Lancer la construction</button>
+</form>
+
+{% endblock %}

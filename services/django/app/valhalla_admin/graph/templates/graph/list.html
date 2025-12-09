@@ -1,0 +1,14 @@
+{% extends "graph/layout.html" %}
+{% block graph_content %}
+
+<h2>📂 Liste des graphes</h2>
+
+<p>Ici on affichera :</p>
+<ul>
+    <li>Graphes construits (id, date, région, sources)</li>
+    <li>Boutons : ▶ Lancer • ⏹ Arrêter • 🗑 Supprimer • 📄 Logs</li>
+</ul>
+
+{% endblock %}
+
+{% block section %}list{% endblock %}
