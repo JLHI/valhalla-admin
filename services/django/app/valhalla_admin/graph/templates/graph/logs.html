@@ -1,0 +1,57 @@
+{% extends "graph/layout.html" %}
+{% block graph_content %}
+
+<h2>📄 Logs — {{ graph.name }}</h2>
+<p style="color:#666; font-size: 12px;">OSM: {{ graph.osm_file|truncatechars:60 }} — GTFS: {{ graph.gtfs_ids|length }} source(s)
+{% if gtfs_start %}
+— Disponibilité: {{ gtfs_start|date:"d/m/Y" }} → {{ gtfs_end|date:"d/m/Y" }}
+{% endif %}
+</p>
+
+<div style="margin-top: 12px; display:flex; gap:8px; align-items:center;">
+  <a href="/graphs/list/" style="background:#9e9e9e; color:#fff; border:none; padding:6px 12px; border-radius:6px; text-decoration:none;">← Retour à la liste</a>
+  <a href="/graphs/create/?task={{ graph.id }}" style="background:#1976d2; color:#fff; border:none; padding:6px 12px; border-radius:6px; text-decoration:none;">Ouvrir la page création</a>
+</div>
+
+<div style="margin-top:16px;">
+  <div class="spinner" id="spinner" style="display:none;"></div>
+  <p id="status">Statut : {{ graph.get_status_display }}</p>
+  <pre id="logs">{{ graph.logs|default:"En attente…" }}</pre>
+</div>
+
+<script>
+(function() {
+  const terminal = ["built", "serving", "error"];
+  const spinner = document.getElementById("spinner");
+  const statusEl = document.getElementById("status");
+  const logsEl = document.getElementById("logs");
+  const graphName = "{{ graph.name }}";
+
+  function setSpinner(visible) {
+    spinner.style.display = visible ? "block" : "none";
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch(`/graphs/${graphName}/status/`);
+      const data = await res.json();
+      statusEl.innerText = "Statut : " + data.status;
+      logsEl.innerText = (data.logs || "");
+      if (data.status && !terminal.includes(data.status)) {
+        setSpinner(true);
+        setTimeout(poll, 3000);
+      } else {
+        setSpinner(false);
+      }
+    } catch (e) {
+      setTimeout(poll, 5000);
+    }
+  }
+
+  const initialStatus = "{{ graph.status }}";
+  setSpinner(!terminal.includes(initialStatus));
+  poll();
+})();
+</script>
+
+{% endblock %}

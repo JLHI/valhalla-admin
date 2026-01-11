@@ -50,6 +50,8 @@ TEMPLATES = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost",
     "http://localhost:8000",
+    "http://127.0.0.1",
+    "http://127.0.0.1:8000",
 ]
 STATIC_URL="/static/"
 MEDIA_ROOT="/app/media"
@@ -63,8 +65,21 @@ LOGIN_REDIRECT_URL = "/"
 
 #LOCALE
 LANGUAGE_CODE = 'fr'
-TIME_ZONE = 'Europe/Paris'
+# Centralized system timezone (configurable via env)
+# Priority: SYSTEM_TIMEZONE > DJANGO_TIMEZONE > default 'Europe/Paris'
+TIME_ZONE = os.getenv("SYSTEM_TIMEZONE", os.getenv("DJANGO_TIMEZONE", "Europe/Paris"))
 
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
+
+#CELERY
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_RESULT_BACKEND = "redis://redis:6379/0"
+CELERY_ENABLE_UTC = True
+CELERY_TIMEZONE = TIME_ZONE
+
+# External APIs
+GTFS_SOURCE_API_URL = os.getenv("GTFS_SOURCE_API_URL", "https://transport.data.gouv.fr/api/datasets?format=gtfs")

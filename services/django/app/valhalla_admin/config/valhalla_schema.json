@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Valhalla Serve Configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "httpd": {
+      "type": "object",
+      "properties": {
+        "service": {
+          "type": "object",
+          "properties": {
+            "listen": { "type": "string" },
+            "timeout_seconds": { "type": "number" },
+            "shutdown_seconds": { "type": "number" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "loki": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "locate","route","height","sources_to_targets","optimized_route",
+              "isochrone","trace_route","trace_attributes","transit_available",
+              "expansion","centroid","status"
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "mjolnir": {
+      "type": "object",
+      "properties": {
+        "tile_dir": { "type": "string" },
+        "tile_extract": { "type": "string" },
+        "timezone": { "type": "string" },
+        "transit_dir": { "type": "string" },
+        "transit_feeds_dir": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "service_limits": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "meili": { "type": "object", "additionalProperties": true },
+    "thor": { "type": "object", "additionalProperties": true },
+    "odin": { "type": "object", "additionalProperties": true }
+  }
+}

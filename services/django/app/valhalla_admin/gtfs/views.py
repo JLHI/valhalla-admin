@@ -3,6 +3,7 @@ from django.shortcuts import redirect, render
 from django.contrib import messages
 from valhalla_admin.gtfs.models import GtfsSource
 from django.core.cache import cache
+from django.conf import settings
 import requests
 from datetime import datetime
 import json
@@ -123,58 +124,6 @@ def add_gtfs_from_eu(request):
     return redirect("/gtfs/list/")
 
 
-    return redirect("/gtfs/list/")
-
-def normalize_title(title):
-    """Normalise un titre pouvant être dict, liste ou string."""
-    if isinstance(title, dict):
-        return title.get("fr") or title.get("en") or next(iter(title.values()), None)
-    if isinstance(title, list) and title:
-        return title[0]
-    return title or "(Sans titre)"
-
-
-def normalize_publisher(pub):
-    """Récupère le nom de l'éditeur, quelle que soit la structure."""
-    if not pub:
-        return None
-    if "name" in pub:
-        return pub["name"]
-    if isinstance(pub, list) and pub:
-        # structure parfois vue dans l'API
-        name = pub[0].get("title")
-        if isinstance(name, list):
-            return name[0]
-        if isinstance(name, dict):
-            return name.get("fr") or name.get("en")
-    return None
-
-
-def extract_formats(item):
-    """Extraction unique des formats disponibles."""
-    formats = set()
-    for d in item.get("distributions", []):
-        fmt = d.get("format", {})
-        if isinstance(fmt, dict):
-            formats.add(fmt.get("label") or fmt.get("id"))
-        else:
-            formats.add(str(fmt))
-    return sorted(f for f in formats if f)
-
-
-def extract_gtfs_url(item):
-    """Trouve la première distribution GTFS."""
-    for dist in item.get("distributions", []):
-        fmt = dist.get("format", {})
-        fmt_id = fmt.get("id", "").upper()
-        if fmt_id == "GTFS":
-            urls = dist.get("download_url") or dist.get("access_url")
-            if isinstance(urls, list):
-                return urls[0]
-            return urls
-    return None
-
-
 def gtfs_list(request):
     cache_key = "gtfs_eu_france_list"
 
@@ -182,7 +131,7 @@ def gtfs_list(request):
     if cached_data:
         items = cached_data
     else:
-        url = "https://transport.data.gouv.fr/api/datasets?format=gtfs"
+        url = getattr(settings, "GTFS_SOURCE_API_URL", "https://transport.data.gouv.fr/api/datasets?format=gtfs")
 
         try:
             response = requests.get(url, timeout=25)

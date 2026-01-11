@@ -1,42 +1,368 @@
 {% extends "graph/layout.html" %}
 {% block graph_content %}
 
+<style>
+.page-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.build-panel {
+  border-left: 1px solid #ddd;
+  padding-left: 2rem;
+}
+
+.spinner {
+  border: 4px solid #eee;
+  border-top: 4px solid #333;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+pre {
+  background: #111;
+  color: #0f0;
+  padding: 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;      /* wrap long lines but keep line breaks */
+  overflow-wrap: anywhere;    /* break overly long tokens anywhere */
+  word-break: break-word;     /* fallback for older browsers */
+}
+
+tr.status-error    { background: #f8d7da; }
+tr.status-building { background: #fff3cd; }
+tr.status-built    { background: #d1e7dd; }
+tr.status-serving  { background: #cff4fc; }
+</style>
+
 <h2>Création d’un graphe Valhalla</h2>
 
-<form action="/graphs/create/" method="post">
+<div class="page-grid">
+
+<!-- FORMULAIRE -->
+<div>
+  <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
 
-    <h3>Sélection des GTFS</h3>
-    <p>GTFS importés dans la base :</p>
+    <h3>GTFS</h3>
     <ul>
-        {% for g in gtfs %}
-            <li>
-                <label>
-                    <input type="checkbox" name="gtfs" value="{{ g.id }}">
-                    {{ g.name }}
-                </label>
-            </li>
-        {% endfor %}
+      {% for g in gtfs %}
+        <li>
+          <label>
+            <input type="checkbox" name="gtfs" value="{{ g.id }}">
+            {{ g.name }}
+          </label>
+        </li>
+      {% endfor %}
     </ul>
 
-    <h3>Sélection du fichier OSM</h3>
-    <p>OSM disponibles :</p>
+    <h3>Importer des GTFS (.zip)</h3>
+    <p style="color:#666; font-size: 12px;">Vous pouvez ajouter un ou plusieurs fichiers GTFS au format .zip. Ils seront intégrés au build avec les sources sélectionnées ci-dessus.</p>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <label style="background:#546e7a; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer;">
+        Choisir des fichiers
+        <input type="file" name="gtfs_zips" id="gtfsZips" accept=".zip" multiple style="display:none" onchange="listSelectedZips()">
+      </label>
+      <span id="zipCount" style="color:#555; font-size:12px;">Aucun fichier sélectionné</span>
+    </div>
+    <ul id="zipList" style="font-size:12px; color:#444; margin-top:8px;"></ul>
+
+    <h3>OSM</h3>
     <ul>
-        {% for osm in osm_catalog %}
-            <li>
-            <label>
-                <input type="radio" name="osm" value="{{ osm.url }}">
-                {{ osm.region }} — {{ osm.size }} MB
-            </label>
-            </li>
-        {% endfor %}
+      {% for osm in osm_catalog %}
+        <li>
+          <label>
+            <input type="radio" name="osm" value="{{ osm.url }}">
+            {{ osm.region }} — {{ osm.size }} MB
+          </label>
+        </li>
+      {% endfor %}
     </ul>
+    <div style="margin-top:8px;">
+      <label style="font-weight:600;">Ou URL OSM (optionnel)</label>
+      <input type="url" name="osm_url" placeholder="https://.../region.osm.pbf" style="width:100%;" />
+      <small style="color:#666;">Si une URL est fournie, elle sera utilisée à la place du choix ci-dessus.</small>
+    </div>
 
     <h3>Nom du graphe</h3>
-    <input type="text" name="graph_name" placeholder="ex: aura_2025" required>
+    <input type="text" name="graph_name" required>
+
+    <h3>Planifier la construction (optionnel)</h3>
+    <input type="datetime-local" name="schedule_at" style="max-width:260px;">
+    <small style="color:#666;">Lancer le build à une date/heure future.</small>
 
     <br><br>
     <button class="btn btn-primary">🚀 Lancer la construction</button>
-</form>
+  </form>
+</div>
+
+<!-- PANEL DROIT -->
+<div class="build-panel">
+
+{% if show_logs and graph %}
+  <div class="spinner" id="spinner" style="display: none;"></div>
+  <p id="status">Statut : {{ graph.get_status_display }}</p>
+  <pre id="logs">{{ graph.logs|default:"En attente…" }}</pre>
+
+  <script>
+  (function() {
+    const terminal = ["built", "serving", "error"];
+    const spinner = document.getElementById("spinner");
+    const statusEl = document.getElementById("status");
+    const logsEl = document.getElementById("logs");
+    const graphName = "{{ graph.name }}";
+
+    function setSpinner(visible) {
+      spinner.style.display = visible ? "block" : "none";
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch("{% url 'graph_status' graph.name %}");
+        const data = await res.json();
+
+        statusEl.innerText = "Statut : " + data.status;
+        logsEl.innerText = data.logs || "";
+
+        if (data.status && !terminal.includes(data.status)) {
+          setSpinner(true);
+          setTimeout(poll, 3000);
+        } else {
+          setSpinner(false);
+        }
+      } catch (e) {
+        setTimeout(poll, 5000);
+      }
+    }
+
+    const initialStatus = "{{ graph.status }}";
+    setSpinner(!terminal.includes(initialStatus));
+    poll();
+  })();
+  </script>
+{% endif %}
+
+<!-- Historique des tâches retiré de la page création; consulter la liste des graphs -->
+
+</div>
+</div>
+
+<!-- Reuse config modal from list page if not present -->
+<div id="configModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
+  <div style="background: #fff; width: 80%; max-width: 900px; margin: 5% auto; padding: 16px; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.2);">
+    <h3 style="margin-top:0;">Éditer valhalla_serve.json — <span id="configGraphName"></span></h3>
+    <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px;">
+      <strong>Presets:</strong>
+      <button onclick="applyPreset('default')" style="background:#9e9e9e; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Défaut</button>
+      <button onclick="applyPreset('multimodal')" style="background:#1976d2; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Multimodal riche</button>
+      <button onclick="applyPreset('isochrone')" style="background:#43a047; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Isochrone rapide</button>
+      <button onclick="applyPreset('trace')" style="background:#fb8c00; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Trace précise</button>
+      <button onclick="formatJson()" style="background:#455a64; color:#fff; border:none; padding:4px 8px; border-radius:4px; margin-left:auto;">Formater JSON</button>
+    </div>
+    <textarea id="configTextarea" style="width: 100%; height: 400px; font-family: monospace; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; padding: 8px;"></textarea>
+    <div style="margin-top: 12px; display:flex; gap: 8px; align-items: center;">
+      <button onclick="saveConfig(false)" style="background:#43a047; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Sauver</button>
+      <button onclick="saveConfig(true)" style="background:#fb8c00; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Sauver et redémarrer</button>
+      <button onclick="validateConfig()" style="background:#00796b; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Valider</button>
+      <button onclick="showPrevious()" style="background:#673ab7; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Afficher l'ancien</button>
+      <button onclick="exportJson()" style="background:#3f51b5; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Exporter</button>
+      <label style="margin-left:auto; display:inline-block;">
+        <span style="background:#546e7a; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer;">Importer JSON</span>
+        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJson(event)">
+      </label>
+      <button onclick="closeConfig()" style="background:#9e9e9e; color:#fff; border:none; padding:6px 12px; border-radius:6px; margin-left:auto;">Fermer</button>
+    </div>
+    <div id="configStatus" style="margin-top:8px; color:#555;"></div>
+    <details style="margin-top:8px;">
+      <summary>Afficher l'aide (tooltips)</summary>
+      <ul style="font-size:12px; color:#444;">
+        <li><code>httpd.service.listen</code>: Adresse d'écoute du service (ex: tcp://*:8002).</li>
+        <li><code>loki.actions</code>: Actions autorisées (route, isochrone, status...).</li>
+        <li><code>mjolnir.tile_dir</code>: Dossier des tiles Valhalla.</li>
+        <li><code>mjolnir.tile_extract</code>: Archive des tiles (tar) si utilisée.</li>
+        <li><code>service_limits.*.max_locations</code>: Nombre max de points par requête.</li>
+        <li><code>service_limits.*.max_distance</code>: Distance max acceptée.</li>
+        <li><code>meili.default.*</code>: Options map-matching (gps_accuracy, search_radius...).</li>
+      </ul>
+    </details>
+  </div>
+</div>
+
+<script>
+  function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+  }
+  let currentGraphName = null;
+  let originalConfigText = '';
+  async function openConfigEditor(name) {
+    currentGraphName = name;
+    document.getElementById('configGraphName').innerText = name;
+    document.getElementById('configStatus').innerText = '';
+    document.getElementById('configTextarea').value = '';
+    document.getElementById('configModal').style.display = 'block';
+    try {
+      const res = await fetch(`/graphs/${name}/config/`);
+      const txt = await res.text();
+      originalConfigText = txt;
+      document.getElementById('configTextarea').value = txt;
+    } catch (e) {
+      document.getElementById('configStatus').innerText = 'Erreur de chargement: ' + e;
+    }
+  }
+  function closeConfig() {
+    document.getElementById('configModal').style.display = 'none';
+  }
+  async function saveConfig(restart) {
+    const statusEl = document.getElementById('configStatus');
+    statusEl.innerText = '';
+    let obj;
+    try {
+      obj = JSON.parse(document.getElementById('configTextarea').value);
+    } catch (e) {
+      statusEl.innerText = 'JSON invalide: ' + e;
+      return;
+    }
+    try {
+      const res = await fetch(`/graphs/${currentGraphName}/config/?restart=${restart ? 'true' : 'false'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+        body: JSON.stringify(obj)
+      });
+      const data = await res.json();
+      if (data.success) {
+        statusEl.innerText = '✅ Sauvegardé' + (restart ? ' + redémarrage' : '');
+      } else {
+        statusEl.innerText = '❌ ' + (data.message || 'Erreur');
+      }
+    } catch (e) {
+      statusEl.innerText = '❌ ' + e;
+    }
+  }
+
+  async function validateConfig() {
+    const statusEl = document.getElementById('configStatus');
+    statusEl.innerText = '';
+    let obj;
+    try {
+      obj = JSON.parse(document.getElementById('configTextarea').value);
+    } catch (e) {
+      statusEl.innerText = 'JSON invalide: ' + e;
+      return;
+    }
+    try {
+      const res = await fetch(`/graphs/${currentGraphName}/config/?dry_run=true`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+        body: JSON.stringify(obj)
+      });
+      const data = await res.json();
+      if (data.success) {
+        statusEl.innerText = '✅ Validation OK';
+      } else {
+        statusEl.innerText = '❌ ' + (data.message || 'Erreur');
+      }
+    } catch (e) {
+      statusEl.innerText = '❌ ' + e;
+    }
+  }
+
+  function showPrevious() {
+    document.getElementById('configTextarea').value = originalConfigText || '';
+    document.getElementById('configStatus').innerText = 'Version précédente affichée';
+  }
+
+  function exportJson() {
+    const blob = new Blob([document.getElementById('configTextarea').value], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `valhalla_serve_${currentGraphName}.json`;
+    a.click();
+  }
+
+  async function importJson(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    document.getElementById('configTextarea').value = text;
+    document.getElementById('configStatus').innerText = 'Fichier importé';
+  }
+
+  function formatJson() {
+    try {
+      const obj = JSON.parse(document.getElementById('configTextarea').value);
+      document.getElementById('configTextarea').value = JSON.stringify(obj, null, 2);
+    } catch (e) {
+      document.getElementById('configStatus').innerText = 'JSON invalide: ' + e;
+    }
+  }
+
+  function applyPreset(name) {
+    let cfg;
+    try {
+      cfg = JSON.parse(document.getElementById('configTextarea').value || '{}');
+    } catch (e) {
+      document.getElementById('configStatus').innerText = 'JSON invalide: ' + e;
+      return;
+    }
+    if (name === 'default') {
+      cfg.service_limits = cfg.service_limits || {};
+      ['auto','bicycle','pedestrian','transit','truck'].forEach(k => {
+        cfg.service_limits[k] = cfg.service_limits[k] || {};
+        cfg.service_limits[k].max_locations = 50;
+      });
+    } else if (name === 'multimodal') {
+      cfg.loki = cfg.loki || {};
+      cfg.loki.actions = [
+        'locate','route','optimized_route','isochrone','trace_route','trace_attributes','transit_available','status'
+      ];
+      cfg.service_limits = cfg.service_limits || {};
+      cfg.service_limits.multimodal = cfg.service_limits.multimodal || {};
+      cfg.service_limits.multimodal.max_locations = 50;
+      cfg.service_limits.pedestrian = cfg.service_limits.pedestrian || {};
+      cfg.service_limits.pedestrian.max_transit_walking_distance = 10000;
+    } else if (name === 'isochrone') {
+      cfg.service_limits = cfg.service_limits || {};
+      cfg.service_limits.isochrone = cfg.service_limits.isochrone || {};
+      cfg.service_limits.isochrone.max_contours = 4;
+      cfg.service_limits.isochrone.max_time_contour = 120;
+      cfg.service_limits.isochrone.max_distance_contour = 200;
+    } else if (name === 'trace') {
+      cfg.meili = cfg.meili || {};
+      cfg.meili.default = cfg.meili.default || {};
+      cfg.meili.default.gps_accuracy = 5.0;
+      cfg.meili.default.search_radius = 50;
+      cfg.meili.default.interpolation_distance = 10;
+    }
+    document.getElementById('configTextarea').value = JSON.stringify(cfg, null, 2);
+    document.getElementById('configStatus').innerText = 'Preset appliqué: ' + name;
+  }
+
+  function listSelectedZips() {
+    const input = document.getElementById('gtfsZips');
+    const list = document.getElementById('zipList');
+    const count = document.getElementById('zipCount');
+    list.innerHTML = '';
+    const files = Array.from(input.files || []);
+    if (!files.length) {
+      count.innerText = 'Aucun fichier sélectionné';
+      return;
+    }
+    count.innerText = files.length + ' fichier(s) sélectionné(s)';
+    files.forEach(f => {
+      const li = document.createElement('li');
+      li.innerText = f.name + ' (' + Math.round((f.size || 0)/1024/1024*10)/10 + ' MB)';
+      list.appendChild(li);
+    });
+  }
+</script>
 
 {% endblock %}

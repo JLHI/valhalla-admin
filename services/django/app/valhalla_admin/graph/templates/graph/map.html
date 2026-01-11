@@ -1,0 +1,643 @@
+{% extends "graph/layout.html" %}
+{% block graph_content %}
+<h2>🗺 Carte — {{ graph.name }}</h2>
+
+{% if serve_url %}
+<p>Service Valhalla: <a href="{{ serve_url }}/status" target="_blank">{{ serve_url }}/status</a></p>
+{% endif %}
+
+<p style="color:#555; margin-top:4px;">
+    GTFS:
+    {% if gtfs_start %}
+        {{ gtfs_start|date:"d/m/Y" }} → {{ gtfs_end|date:"d/m/Y" }}
+    {% else %}
+        indisponible
+    {% endif %}
+</p>
+
+<div id="mapLayout" style="display:flex; gap:12px; align-items:flex-start;">
+    <div id="mapCol" style="flex:1 1 auto; min-width:0;">
+        <div id="map" style="height: 70vh; border:1px solid #eee; border-radius:6px;"></div>
+        <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+            <input id="bboxInput" type="text" placeholder="bbox minLon,minLat,maxLon,maxLat" style="flex:1; padding:6px; border:1px solid #ddd; border-radius:4px;"/>
+            <button id="applyBbox" style="background:#1976d2; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Appliquer BBox</button>
+            <button id="resetBbox" style="background:#9e9e9e; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Réinitialiser</button>
+            <span id="countInfo" style="margin-left:auto; color:#555;"></span>
+        </div>
+    </div>
+    <div id="sideCol" style="width: 380px; flex: 0 0 380px;">
+        <div style="border:1px solid #eee; border-radius:6px; padding:10px;">
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                <strong>Playground</strong>
+                <span style="color:#777;">— Cliquez sur la carte: origine puis destination. Pour isochrone: le dernier point cliqué est utilisé.</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <label>Mode
+                    <select id="modeSelect" style="padding:4px; border:1px solid #ddd; border-radius:4px;">
+                        <option value="auto">Auto</option>
+                        <option value="pedestrian">Piéton</option>
+                        <option value="bicycle">Vélo</option>
+                        <option value="multimodal">Transit</option>
+                    </select>
+                </label>
+                <label>Date/Heure (Transit)
+                    <input id="dtInput" type="datetime-local" style="padding:4px; border:1px solid #ddd; border-radius:4px;" />
+                </label>
+                <label>Type
+                    <select id="dtType" style="padding:4px; border:1px solid #ddd; border-radius:4px;">
+                        <option value="depart">Départ</option>
+                        <option value="arrive">Arrivée</option>
+                    </select>
+                </label>
+                <button id="runRoute" style="background:#1976d2; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Tracer route</button>
+                <button id="runIso" style="background:#43a047; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Isochrone</button>
+                <label>Contours
+                    <input id="contoursInput" type="text" value="5,10,15,30" style="width:140px; padding:4px; border:1px solid #ddd; border-radius:4px;" />
+                </label>
+                <label><input id="polyOn" type="checkbox" checked /> Polygones</label>
+                <button id="clearOrigin" style="background:#9e9e9e; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Supprimer origine</button>
+                <button id="clearDest" style="background:#9e9e9e; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Supprimer destination</button>
+                <button id="clearAllPts" style="background:#9e9e9e; color:#fff; border:none; padding:6px 12px; border-radius:4px;">Supprimer tous</button>
+            </div>
+            <details style="margin-top:8px;">
+                <summary>Options avancées</summary>
+                <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+                    <div id="pedOptions">
+                        <div style="font-weight:600; color:#555; margin-bottom:4px;">Piéton</div>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <label>Max marche (m)
+                                <input id="pedMaxWalk" type="number" min="0" step="1" placeholder="ex: 2000" style="width:140px; padding:4px; border:1px solid #ddd; border-radius:4px;" />
+                            </label>
+                            <label>Vitesse (km/h)
+                                <input id="pedSpeed" type="number" min="1" step="0.5" placeholder="ex: 5" style="width:100px; padding:4px; border:1px solid #ddd; border-radius:4px;" />
+                            </label>
+                            <label>Pénalité marche (facteur)
+                                <input id="pedWalkFactor" type="number" min="0.5" step="0.1" placeholder="ex: 1.5" style="width:100px; padding:4px; border:1px solid #ddd; border-radius:4px;" />
+                            </label>
+                        </div>
+                    </div>
+                    <div id="transitOptions">
+                        <div style="font-weight:600; color:#555; margin-bottom:4px;">Transit</div>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <label>Max marche (m)
+                                <input id="transitMaxWalk" type="number" min="0" step="1" placeholder="ex: 1500" style="width:140px; padding:4px; border:1px solid #ddd; border-radius:4px;" />
+                            </label>
+                            <label>Utiliser transferts (0–1)
+                                <input id="transitUseTransfers" type="number" min="0" max="1" step="0.1" placeholder="ex: 0.7" style="width:100px; padding:4px; border:1px solid #ddd; border-radius:4px;" />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </details>
+            <div id="playgroundInfo" style="margin-top:8px; color:#555;"></div>
+            <details style="margin-top:8px;">
+                <summary>JSON réponse</summary>
+                <pre id="jsonOut" style="max-height:220px; overflow:auto; background:#fafafa; border:1px solid #eee; padding:8px; border-radius:4px;"></pre>
+            </details>
+        </div>
+        <div id="maneuversPanel" style="margin-top:12px; border:1px solid #eee; border-radius:6px; padding:10px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <strong>Maneuvers</strong>
+                <span style="color:#777;">— Cliquez pour surligner/zoomer</span>
+            </div>
+            <ol id="mansList" style="margin:0; padding-left:20px; font-size:13px;"></ol>
+            <div id="mansInfo" style="margin-top:8px; color:#555;"></div>
+            <div id="mansEmpty" style="color:#777; display:none;">Aucun segment.</div>
+            <div style="margin-top:8px; display:flex; gap:6px;">
+                <button id="clearHighlight" style="background:#9e9e9e; color:#fff; border:none; padding:4px 10px; border-radius:4px;">Effacer surbrillance</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <strong>Styles par mode:</strong>
+    <span style="display:inline-flex; align-items:center; gap:6px;"><span style="display:inline-block; width:24px; height:4px; background:#1976d2;"></span> Auto</span>
+    <span style="display:inline-flex; align-items:center; gap:6px;"><span style="display:inline-block; width:24px; height:4px; background:#43a047;"></span> Piéton</span>
+    <span style="display:inline-flex; align-items:center; gap:6px;"><span style="display:inline-block; width:24px; height:4px; background:#fbc02d;"></span> Vélo</span>
+    <span style="display:inline-flex; align-items:center; gap:6px;"><span style="display:inline-block; width:24px; height:4px; background:#8e24aa;"></span> Transit</span>
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+
+<style>
+    @media (max-width: 980px) {
+        #mapLayout { flex-direction: column; }
+        #sideCol { width: 100%; flex: 0 0 auto; }
+    }
+</style>
+
+{{ graph.name|json_script:"gname" }}
+{% if serve_url %}{{ serve_url|json_script:"serveurl" }}{% endif %}
+<script>
+    const name = JSON.parse(document.getElementById('gname').textContent);
+    const serveUrlEl = document.getElementById('serveurl');
+    const serveUrl = serveUrlEl ? JSON.parse(serveUrlEl.textContent) : null;
+    const stopsUrlBase = `/graphs/${name}/stops.geojson`;
+    const map = L.map('map');
+
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const clusters = L.markerClusterGroup({ showCoverageOnHover: false });
+    map.addLayer(clusters);
+
+    let currentGeo = null;
+
+    async function loadStops(bboxQuery) {
+        const url = bboxQuery ? `${stopsUrlBase}?bbox=${encodeURIComponent(bboxQuery)}` : stopsUrlBase;
+        const res = await fetch(url);
+        const geo = await res.json();
+        currentGeo = geo;
+
+        clusters.clearLayers();
+        const markers = [];
+        for (const f of geo.features || []) {
+            const [lon, lat] = f.geometry.coordinates;
+            const m = L.marker([lat, lon]);
+            const p = f.properties || {};
+            m.bindPopup(`<strong>${p.stop_name || ''}</strong><br/>ID: ${p.stop_id || ''}<br/>Feed: ${p.feed || ''}`);
+            markers.push(m);
+        }
+        clusters.addLayers(markers);
+
+        // Fit bounds if we have markers
+        if (markers.length) {
+            const group = L.featureGroup(markers);
+            map.fitBounds(group.getBounds().pad(0.1));
+        } else {
+            map.setView([47.218, -1.552], 12); // fallback Nantes
+        }
+        document.getElementById('countInfo').textContent = `${markers.length} arrêts`;
+    }
+
+    // Initialize map
+    map.setView([47.218, -1.552], 12);
+    loadStops();
+
+    document.getElementById('applyBbox').addEventListener('click', () => {
+        const val = document.getElementById('bboxInput').value.trim();
+        if (!val) return;
+        loadStops(val);
+    });
+    document.getElementById('resetBbox').addEventListener('click', () => {
+        document.getElementById('bboxInput').value = '';
+        loadStops();
+    });
+
+        // ─────────────────────────
+        // Playground: route & isochrone
+        // ─────────────────────────
+        let origin = null;
+        let destination = null;
+        let lastClick = null;
+        let originMarker = null;
+        let destMarker = null;
+        let routeLayer = null;
+        let routeSegments = []; // [{layer, m, idx}]
+        let isoLayer = null;
+
+        function makeDotIcon(color) {
+            return L.divIcon({
+                className: 'dot-icon',
+                html: `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,.4)"></span>`,
+                iconSize: [14, 14],
+                iconAnchor: [7, 7]
+            });
+        }
+
+        function setMarker(latlng, isOrigin) {
+            const color = isOrigin ? '#1976d2' : '#d32f2f';
+            const marker = L.marker(latlng, { draggable: true, icon: makeDotIcon(color) });
+            if (isOrigin) {
+                if (originMarker) originMarker.remove();
+                originMarker = marker.addTo(map);
+                origin = latlng;
+                originMarker.on('dragend', (e) => {
+                    const p = e.target.getLatLng();
+                    origin = p;
+                    document.getElementById('playgroundInfo').textContent = `Origine déplacée: ${origin.lat.toFixed(5)}, ${origin.lng.toFixed(5)}`;
+                });
+                originMarker.on('dblclick', () => { clearOrigin(); });
+            } else {
+                if (destMarker) destMarker.remove();
+                destMarker = marker.addTo(map);
+                destination = latlng;
+                destMarker.on('dragend', (e) => {
+                    const p = e.target.getLatLng();
+                    destination = p;
+                    document.getElementById('playgroundInfo').textContent = `Destination déplacée: ${destination.lat.toFixed(5)}, ${destination.lng.toFixed(5)}`;
+                });
+                destMarker.on('dblclick', () => { clearDestination(); });
+            }
+        }
+
+        function clearOrigin() {
+            if (originMarker) { try { originMarker.remove(); } catch {} originMarker = null; }
+            origin = null;
+            document.getElementById('playgroundInfo').textContent = 'Origine supprimée.';
+        }
+        function clearDestination() {
+            if (destMarker) { try { destMarker.remove(); } catch {} destMarker = null; }
+            destination = null;
+            document.getElementById('playgroundInfo').textContent = 'Destination supprimée.';
+        }
+        function clearAllPoints() {
+            clearOrigin();
+            clearDestination();
+            lastClick = null;
+            document.getElementById('playgroundInfo').textContent = 'Points supprimés.';
+        }
+
+        // Click on map to set/move points
+        map.on('click', (e) => {
+            lastClick = e.latlng;
+            if (!origin) {
+                setMarker(e.latlng, true);
+                document.getElementById('playgroundInfo').textContent = `Origine: ${origin.lat.toFixed(5)}, ${origin.lng.toFixed(5)}`;
+            } else if (!destination) {
+                setMarker(e.latlng, false);
+                document.getElementById('playgroundInfo').textContent = `Origine & Destination choisis.`;
+            } else {
+                // After both set, subsequent clicks move destination
+                setMarker(e.latlng, false);
+                document.getElementById('playgroundInfo').textContent = `Destination mise à jour.`;
+            }
+        });
+
+        function modeDefaults(mode) {
+            switch (mode) {
+                case 'pedestrian': return { contours: [5,10,15,30], denoise: 0.3, generalize: 25 };
+                case 'bicycle': return { contours: [5,10,15,25], denoise: 0.3, generalize: 50 };
+                case 'multimodal': return { contours: [10,20,30,45], denoise: 0.3, generalize: 50 };
+                default: return { contours: [5,10,15,30], denoise: 0.3, generalize: 50 };
+            }
+        }
+
+        const modeSelect = document.getElementById('modeSelect');
+        const contoursInput = document.getElementById('contoursInput');
+        const polyOn = document.getElementById('polyOn');
+        const jsonOut = document.getElementById('jsonOut');
+        const dtInput = document.getElementById('dtInput');
+        const dtType = document.getElementById('dtType');
+        const pedOptions = document.getElementById('pedOptions');
+        const transitOptions = document.getElementById('transitOptions');
+        const pedMaxWalkEl = document.getElementById('pedMaxWalk');
+        const pedSpeedEl = document.getElementById('pedSpeed');
+        const pedWalkFactorEl = document.getElementById('pedWalkFactor');
+        const transitMaxWalkEl = document.getElementById('transitMaxWalk');
+        const transitUseTransfersEl = document.getElementById('transitUseTransfers');
+
+        function updateTransitControls() {
+            const isTransit = (modeSelect.value === 'multimodal');
+            const isPed = (modeSelect.value === 'pedestrian');
+            if (dtInput) dtInput.disabled = !isTransit;
+            if (dtType) dtType.disabled = !isTransit;
+            // Enable/disable advanced inputs by mode, keep them visible
+            if (pedOptions) {
+                pedOptions.querySelectorAll('input').forEach(inp => inp.disabled = !isPed);
+            }
+            if (transitOptions) {
+                transitOptions.querySelectorAll('input').forEach(inp => inp.disabled = !isTransit);
+            }
+        }
+        modeSelect.addEventListener('change', updateTransitControls);
+        updateTransitControls();
+
+        function formatValhallaDateTime(date) {
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const mn = String(date.getMinutes()).padStart(2, '0');
+            // Valhalla expects YYYY-MM-DDTHH:MM (no seconds or timezone)
+            return `${yyyy}-${mm}-${dd}T${hh}:${mn}`;
+        }
+
+        // Default datetime to now for convenience and sensible defaults for options
+        try { dtInput.value = formatValhallaDateTime(new Date()); } catch {}
+        try {
+            if (pedMaxWalkEl && !pedMaxWalkEl.value) pedMaxWalkEl.value = 2000;
+            if (pedSpeedEl && !pedSpeedEl.value) pedSpeedEl.value = 5;
+            if (pedWalkFactorEl && !pedWalkFactorEl.value) pedWalkFactorEl.value = 1.5;
+            if (transitMaxWalkEl && !transitMaxWalkEl.value) transitMaxWalkEl.value = 1500;
+            if (transitUseTransfersEl && !transitUseTransfersEl.value) transitUseTransfersEl.value = 0.7;
+        } catch {}
+
+        modeSelect.addEventListener('change', () => {
+            const m = modeSelect.value;
+            const d = modeDefaults(m);
+            contoursInput.value = d.contours.join(',');
+        });
+
+        function decodePolyline(polyline) {
+            // Simple polyline decode for 5-digit precision
+            let index = 0, lat = 0, lng = 0, coordinates = [];
+            const factor = 1e-6;
+            while (index < polyline.length) {
+                let result = 0, shift = 0, b;
+                do { b = polyline.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+                const dlat = (result & 1 ? ~(result >> 1) : (result >> 1));
+                lat += dlat;
+                result = 0; shift = 0;
+                do { b = polyline.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+                const dlng = (result & 1 ? ~(result >> 1) : (result >> 1));
+                lng += dlng;
+                coordinates.push([lat * factor, lng * factor]);
+            }
+            return coordinates.map(([la, lo]) => [la, lo]);
+        }
+
+        function modeColor(mode) {
+            switch ((mode || '').toLowerCase()) {
+                case 'drive':
+                case 'auto':
+                    return '#1976d2';
+                case 'pedestrian':
+                    return '#43a047';
+                case 'bicycle':
+                case 'bike':
+                    return '#fbc02d';
+                case 'transit':
+                case 'multimodal':
+                    return '#8e24aa';
+                default:
+                    return '#1976d2';
+            }
+        }
+
+        function segmentPopupContent(m) {
+            const names = (m.street_names || []).join(', ');
+            const instr = m.instruction || '';
+            const lenKm = (typeof m.length === 'number') ? m.length.toFixed(2) : null;
+            const timeMin = (typeof m.time === 'number') ? Math.round(m.time / 60) : null;
+            const travelMode = m.travel_mode || '';
+            const travelType = m.travel_type || '';
+            const parts = [];
+            if (instr) parts.push(`<div style="margin-bottom:4px;"><strong>${instr}</strong></div>`);
+            if (names) parts.push(`<div>Rue: ${names}</div>`);
+            parts.push(`<div>Mode: ${travelMode || 'n/a'} ${travelType ? '(' + travelType + ')' : ''}</div>`);
+            if (lenKm !== null) parts.push(`<div>Distance: ${lenKm} km</div>`);
+            if (timeMin !== null) parts.push(`<div>Durée: ${timeMin} min</div>`);
+            return parts.join('');
+        }
+
+        function populateManeuversList(mans) {
+            const ol = document.getElementById('mansList');
+            const empty = document.getElementById('mansEmpty');
+            const info = document.getElementById('mansInfo');
+            ol.innerHTML = '';
+            routeSegments.forEach(seg => seg.layer.setStyle({ weight: 5, opacity: 0.9 }));
+            if (!mans || !mans.length) {
+                empty.style.display = 'block';
+                info.textContent = '';
+                return;
+            }
+            empty.style.display = 'none';
+            info.textContent = `${mans.length} segment(s)`;
+            mans.forEach((m, i) => {
+                const li = document.createElement('li');
+                const mode = (m.travel_mode || '').toLowerCase();
+                const color = modeColor(mode);
+                const icon = `<span style="display:inline-block;width:12px;height:3px;background:${color};margin-right:6px;"></span>`;
+                const name = (m.instruction || m.street_names?.join(', ') || 'Segment');
+                li.innerHTML = `${icon}${name}`;
+                li.style.cursor = 'pointer';
+                li.addEventListener('click', () => highlightSegment(i));
+                ol.appendChild(li);
+            });
+        }
+
+        function highlightSegment(index) {
+            if (!routeSegments.length) return;
+            // reset
+            routeSegments.forEach(seg => seg.layer.setStyle({ weight: 5, opacity: 0.9 }));
+            const seg = routeSegments[index];
+            if (!seg) return;
+            seg.layer.setStyle({ weight: 8, opacity: 1 });
+            seg.layer.openPopup();
+            try { map.fitBounds(seg.layer.getBounds().pad(0.05)); } catch {}
+        }
+
+        document.getElementById('clearHighlight').addEventListener('click', () => {
+            routeSegments.forEach(seg => seg.layer.setStyle({ weight: 5, opacity: 0.9 }));
+        });
+
+        async function runRoute() {
+            const m = modeSelect.value;
+            if (!origin || !destination) {
+                document.getElementById('playgroundInfo').textContent = 'Sélectionnez origine et destination par clic sur la carte.';
+                return;
+            }
+            const body = {
+                locations: [
+                    { lat: origin.lat, lon: origin.lng },
+                    { lat: destination.lat, lon: destination.lng }
+                ],
+                costing: m,
+                directions_options: { units: 'kilometers', language: 'fr-FR' }
+            };
+            // Apply costing_options based on mode
+            const costing_options = {};
+            if (m === 'pedestrian') {
+                costing_options.pedestrian = {};
+                const maxWalk = pedMaxWalkEl ? parseInt(pedMaxWalkEl.value, 10) : NaN;
+                const speed = pedSpeedEl ? parseFloat(pedSpeedEl.value) : NaN;
+                const walkFactor = pedWalkFactorEl ? parseFloat(pedWalkFactorEl.value) : NaN;
+                if (!isNaN(maxWalk) && maxWalk > 0) costing_options.pedestrian.max_walk_distance = maxWalk;
+                if (!isNaN(speed) && speed > 0) costing_options.pedestrian.walking_speed = speed;
+                if (!isNaN(walkFactor) && walkFactor > 0) costing_options.pedestrian.walk_factor = walkFactor;
+            }
+            if (m === 'multimodal') {
+                costing_options.transit = {};
+                const tMaxWalk = transitMaxWalkEl ? parseInt(transitMaxWalkEl.value, 10) : NaN;
+                const tUseTransfers = transitUseTransfersEl ? parseFloat(transitUseTransfersEl.value) : NaN;
+                if (!isNaN(tMaxWalk) && tMaxWalk > 0) costing_options.transit.max_walk_distance = tMaxWalk;
+                if (!isNaN(tUseTransfers) && tUseTransfers >= 0 && tUseTransfers <= 1) costing_options.transit.use_transfers = tUseTransfers;
+                // Also apply pedestrian walking parameters for the non-transit legs
+                costing_options.pedestrian = {};
+                const speed = pedSpeedEl ? parseFloat(pedSpeedEl.value) : NaN;
+                const walkFactor = pedWalkFactorEl ? parseFloat(pedWalkFactorEl.value) : NaN;
+                const maxWalk = pedMaxWalkEl ? parseInt(pedMaxWalkEl.value, 10) : NaN;
+                if (!isNaN(maxWalk) && maxWalk > 0) costing_options.pedestrian.max_walk_distance = maxWalk;
+                if (!isNaN(speed) && speed > 0) costing_options.pedestrian.walking_speed = speed;
+                if (!isNaN(walkFactor) && walkFactor > 0) costing_options.pedestrian.walk_factor = walkFactor;
+            }
+            if (Object.keys(costing_options).length) body.costing_options = costing_options;
+            if (m === 'multimodal') {
+                const desired = (dtInput && dtInput.value) ? dtInput.value : formatValhallaDateTime(new Date());
+                let departValue = desired;
+                if (dtType && dtType.value === 'arrive') {
+                    if (jsonOut) jsonOut.textContent = 'Calcul de l\'heure de départ pour arriver à l\'heure cible…';
+                    const target = new Date(desired);
+                    const valhallaUrl = serveUrl + '/route?json=';
+                    async function routeWithDepart(departStr) {
+                        const req = { ...body, date_time: { type: 1, value: departStr } };
+                        const resp = await fetch(valhallaUrl + encodeURIComponent(JSON.stringify(req)));
+                        return resp.json();
+                    }
+                    function totalLegSeconds(json) {
+                        try {
+                            const routes = json.trip.routes || [];
+                            if (!routes.length) return null;
+                            let secs = 0;
+                            for (const leg of routes[0].legs || []) {
+                                if (leg.summary && typeof leg.summary.time === 'number') secs += leg.summary.time;
+                            }
+                            return secs || null;
+                        } catch { return null; }
+                    }
+                    async function emulateArriveBy(targetDt, maxIter = 6, tolMin = 2) {
+                        let low = new Date(targetDt.getTime() - 3 * 60 * 60000);
+                        let high = new Date(targetDt.getTime());
+                        let guess = new Date(targetDt.getTime() - 45 * 60000);
+                        for (let i = 0; i < maxIter; i++) {
+                            const departStr = formatValhallaDateTime(guess);
+                            const json = await routeWithDepart(departStr);
+                            const secs = totalLegSeconds(json);
+                            if (!secs) { high = guess; guess = new Date((low.getTime() + high.getTime()) / 2); continue; }
+                            const arrival = new Date(guess.getTime() + secs * 1000);
+                            const diffMin = Math.abs((arrival.getTime() - targetDt.getTime()) / 60000);
+                            if (diffMin <= tolMin) return departStr;
+                            if (arrival > targetDt) { high = guess; } else { low = guess; }
+                            guess = new Date((low.getTime() + high.getTime()) / 2);
+                        }
+                        return formatValhallaDateTime(guess);
+                    }
+                    const computed = await emulateArriveBy(target);
+                    departValue = computed;
+                    if (jsonOut) jsonOut.textContent = `Arrivée (émulée): départ à ${computed} pour viser ${desired}`;
+                }
+                body.date_time = { type: 1, value: departValue };
+            }
+            try {
+                if (!serveUrl) { document.getElementById('playgroundInfo').textContent = 'Service Valhalla indisponible.'; return; }
+                // Avoid CORS preflight by using GET with json query param
+                const url = `${serveUrl}/route?json=${encodeURIComponent(JSON.stringify(body))}`;
+                const res = await fetch(url, { method: 'GET' });
+                const j = await res.json();
+                jsonOut.textContent = JSON.stringify(j, null, 2);
+                const leg = j?.trip?.legs?.[0];
+                const shape = leg?.shape;
+                if (shape) {
+                    const coords = decodePolyline(shape);
+                    if (routeLayer) { routeLayer.remove(); routeLayer = null; }
+                    const group = L.layerGroup();
+                    const mans = leg?.maneuvers || [];
+                    routeSegments = [];
+                    if (mans.length) {
+                        for (const m of mans) {
+                            const b = (typeof m.begin_shape_index === 'number') ? m.begin_shape_index : null;
+                            const e = (typeof m.end_shape_index === 'number') ? m.end_shape_index : null;
+                            if (b === null || e === null || b < 0 || e >= coords.length || e < b) continue;
+                            const seg = coords.slice(b, e + 1);
+                            const color = modeColor(m.travel_mode || body.costing);
+                            const pl = L.polyline(seg, { color, weight: 5, opacity: 0.9 });
+                            pl.bindPopup(segmentPopupContent(m));
+                            group.addLayer(pl);
+                            routeSegments.push({ layer: pl, m });
+                        }
+                        populateManeuversList(mans);
+                    } else {
+                        const color = modeColor(body.costing);
+                        const pl = L.polyline(coords, { color, weight: 4 });
+                        group.addLayer(pl);
+                        populateManeuversList([]);
+                    }
+                    routeLayer = group.addTo(map);
+                    map.fitBounds(routeLayer.getBounds().pad(0.1));
+                }
+                const s = j?.trip?.summary;
+                if (s) document.getElementById('playgroundInfo').textContent = `Route: ${s.length?.toFixed?.(2)} km, ${Math.round(s.time/60)} min`;
+            } catch (e) {
+                document.getElementById('playgroundInfo').textContent = 'Erreur route.';
+            }
+        }
+
+        async function runIsochrone() {
+            const m = modeSelect.value;
+            const d = modeDefaults(m);
+            const contours = (contoursInput.value || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+            const usePoly = polyOn.checked;
+            const center = lastClick || origin;
+            if (!center) {
+                document.getElementById('playgroundInfo').textContent = 'Cliquez sur la carte pour définir le centre.';
+                return;
+            }
+            const body = {
+                locations: [{ lat: center.lat, lon: center.lng }],
+                costing: m,
+                contours: contours.map(t => ({ time: t, color: '#1976d2' })),
+                polygons: usePoly,
+                denoise: d.denoise,
+                generalize: d.generalize,
+            };
+            // Apply costing_options for isochrone too
+            const iso_costing_options = {};
+            if (m === 'pedestrian') {
+                iso_costing_options.pedestrian = {};
+                const maxWalk = pedMaxWalkEl ? parseInt(pedMaxWalkEl.value, 10) : NaN;
+                const speed = pedSpeedEl ? parseFloat(pedSpeedEl.value) : NaN;
+                const walkFactor = pedWalkFactorEl ? parseFloat(pedWalkFactorEl.value) : NaN;
+                if (!isNaN(maxWalk) && maxWalk > 0) iso_costing_options.pedestrian.max_walk_distance = maxWalk;
+                if (!isNaN(speed) && speed > 0) iso_costing_options.pedestrian.walking_speed = speed;
+                if (!isNaN(walkFactor) && walkFactor > 0) iso_costing_options.pedestrian.walk_factor = walkFactor;
+            }
+            if (m === 'multimodal') {
+                iso_costing_options.transit = {};
+                const tMaxWalk = transitMaxWalkEl ? parseInt(transitMaxWalkEl.value, 10) : NaN;
+                const tUseTransfers = transitUseTransfersEl ? parseFloat(transitUseTransfersEl.value) : NaN;
+                if (!isNaN(tMaxWalk) && tMaxWalk > 0) iso_costing_options.transit.max_walk_distance = tMaxWalk;
+                if (!isNaN(tUseTransfers) && tUseTransfers >= 0 && tUseTransfers <= 1) iso_costing_options.transit.use_transfers = tUseTransfers;
+                // Also apply pedestrian walking parameters for non-transit legs
+                iso_costing_options.pedestrian = {};
+                const speed = pedSpeedEl ? parseFloat(pedSpeedEl.value) : NaN;
+                const walkFactor = pedWalkFactorEl ? parseFloat(pedWalkFactorEl.value) : NaN;
+                const maxWalk = pedMaxWalkEl ? parseInt(pedMaxWalkEl.value, 10) : NaN;
+                if (!isNaN(maxWalk) && maxWalk > 0) iso_costing_options.pedestrian.max_walk_distance = maxWalk;
+                if (!isNaN(speed) && speed > 0) iso_costing_options.pedestrian.walking_speed = speed;
+                if (!isNaN(walkFactor) && walkFactor > 0) iso_costing_options.pedestrian.walk_factor = walkFactor;
+            }
+            if (Object.keys(iso_costing_options).length) body.costing_options = iso_costing_options;
+            if (m === 'multimodal') {
+                const when = (dtInput && dtInput.value) ? dtInput.value : formatValhallaDateTime(new Date());
+                if (dtType && dtType.value === 'arrive') {
+                    if (jsonOut) jsonOut.textContent = 'Arrivée pour isochrone multimodal non disponible; utilisation du départ.';
+                }
+                body.date_time = { type: 1, value: when };
+            }
+            try {
+                if (!serveUrl) { document.getElementById('playgroundInfo').textContent = 'Service Valhalla indisponible.'; return; }
+                // Avoid CORS preflight by using GET with json query param
+                const url = `${serveUrl}/isochrone?json=${encodeURIComponent(JSON.stringify(body))}`;
+                const res = await fetch(url, { method: 'GET' });
+                const j = await res.json();
+                jsonOut.textContent = JSON.stringify(j, null, 2);
+                if (isoLayer) isoLayer.remove();
+                if (j?.features) {
+                    isoLayer = L.geoJSON(j, { style: f => ({ color: f.properties?.color || '#1976d2', weight: 2, fillOpacity: 0.25 }) }).addTo(map);
+                    map.fitBounds(isoLayer.getBounds().pad(0.1));
+                    document.getElementById('playgroundInfo').textContent = `Isochrone: ${contours.join(', ')} min`;
+                } else {
+                    document.getElementById('playgroundInfo').textContent = 'Isochrone: aucune géométrie.';
+                }
+            } catch (e) {
+                document.getElementById('playgroundInfo').textContent = 'Erreur isochrone.';
+            }
+        }
+
+        document.getElementById('runRoute').addEventListener('click', runRoute);
+        document.getElementById('runIso').addEventListener('click', runIsochrone);
+        document.getElementById('clearOrigin').addEventListener('click', clearOrigin);
+        document.getElementById('clearDest').addEventListener('click', clearDestination);
+        document.getElementById('clearAllPts').addEventListener('click', clearAllPoints);
+</script>
+{% endblock %}
+
+{% block section %}list{% endblock %}

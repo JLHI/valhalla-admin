@@ -2,11 +2,17 @@ services:
   valhalla:
     build: ../services/valhalla
     container_name: valhallaDjango
-    ports:
-      - "8002:8002"
     volumes:
-      - ../data:/data
+      - ../data/graphs:/data/graphs
+      - ../data/sources:/data/sources:ro
+    env_file:
+      - env/valhalla.env
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 12g
+    shm_size: 2g
 
   django:
     build: ../services/django
@@ -16,26 +22,50 @@ services:
       - "8000:8000"
     volumes:
     - ../services/django/app:/app
+    - ../data/sources:/data/sources
+    - ../data/graphs:/data/graphs
+    - /var/run/docker.sock:/var/run/docker.sock
+
     env_file:
       - env/django.env
     depends_on:
       - postgres
       - redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u; u.urlopen('http://localhost:8000/').read()\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 
   worker:
     build: ../services/django
     container_name: celery_worker
-    command: celery -A valhalla_admin worker -l info
+    command: sh -c "celery -A valhalla_admin worker -l info --concurrency=${CELERY_CONCURRENCY:-1}"
     volumes:
       - ../services/django/app:/app
+      - ../data/sources:/data/sources
+      - ../data/graphs:/data/graphs
+      - ../data/valhalla:/data/valhalla
+      - /var/run/docker.sock:/var/run/docker.sock
+
     env_file:
       - env/django.env
     depends_on:
       - django
       - redis
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 10g
+    shm_size: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep -q celery"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 
   scheduler:
@@ -50,6 +80,11 @@ services:
       - django
       - redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep -q 'celery beat'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   redis:
     image: redis:7

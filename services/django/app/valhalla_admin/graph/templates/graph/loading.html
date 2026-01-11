@@ -1,0 +1,29 @@
+<h3>Création du graph : {{ graph.name }}</h3>
+
+<div class="spinner"></div>
+<p id="status">Initialisation…</p>
+
+<pre id="logs">En attente…</pre>
+
+<script>
+async function poll() {
+  const res = await fetch("{% url 'graph_status' graph.name %}");
+  const data = await res.json();
+
+  document.getElementById("status").innerText =
+    "Statut : " + data.status;
+
+  if (data.logs) {
+    document.getElementById("logs").innerText = data.logs;
+  }
+
+  if (data.ready) {
+    window.location.href = "{% url 'graph_detail' graph.name %}";
+    return;
+  }
+
+  setTimeout(poll, 2000);
+}
+
+poll();
+</script>

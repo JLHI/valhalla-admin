@@ -1,0 +1,17 @@
+{
+  "httpd.service.listen": "Adresse d'écoute du service (ex: tcp://*:8002).",
+  "httpd.service.timeout_seconds": "Durée max d'attente des requêtes avant time-out.",
+  "httpd.service.shutdown_seconds": "Délai de shutdown gracieux.",
+  "loki.actions": "Liste des actions autorisées (route, isochrone, status...).",
+  "mjolnir.tile_dir": "Dossier des tiles Valhalla (monte sous /data/valhalla).",
+  "mjolnir.tile_extract": "Archive des tiles (tar) si utilisée.",
+  "mjolnir.timezone": "Base timezone SQLite des tiles.",
+  "mjolnir.transit_dir": "Dossier des tiles transport (GTFS converti).",
+  "mjolnir.transit_feeds_dir": "Dossier des GTFS ingérés.",
+  "service_limits.auto.max_locations": "Nombre max de points pour les requêtes auto.",
+  "service_limits.pedestrian.max_transit_walking_distance": "Marche max vers le transit (m).",
+  "meili.default.gps_accuracy": "Précision GPS moyenne en mètres pour map-matching.",
+  "meili.default.search_radius": "Rayon de recherche autour des points (m).",
+  "meili.default.interpolation_distance": "Distance d'interpolation entre points (m).",
+  "thor.unidirectional_astar.hierarchy_limits.max_up_transitions": "Transitions hiérarchiques max (contrôle complexité)."
+}

@@ -1,13 +1,497 @@
 {% extends "graph/layout.html" %}
 {% block graph_content %}
 
-<h2>📂 Liste des graphes</h2>
+<h2>📂 Liste des Graphs</h2>
 
-<p>Ici on affichera :</p>
-<ul>
-    <li>Graphes construits (id, date, région, sources)</li>
-    <li>Boutons : ▶ Lancer • ⏹ Arrêter • 🗑 Supprimer • 📄 Logs</li>
-</ul>
+{% if graphs %}
+<table style="width: 100%; border-collapse: collapse; margin-top: 20px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <thead>
+        <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
+            <th style="padding: 12px; text-align: left;">Nom</th>
+            <th style="padding: 12px; text-align: left;">Date création</th>
+            <th style="padding: 12px; text-align: center;">Statut</th>
+            <th style="padding: 12px; text-align: center;">Container</th>
+            <th style="padding: 12px; text-align: center;">Port</th>
+            <th style="padding: 12px; text-align: center;">Actions</th>
+            <th style="padding: 12px; text-align: center;">Config</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for graph in graphs %}
+        <tr style="border-bottom: 1px solid #eee;" data-graph-id="{{ graph.id }}">
+            <td style="padding: 12px;">
+                <strong>{{ graph.name }}</strong><br>
+                <small style="color: #666;">
+                    OSM: {{ graph.osm_file|truncatechars:30 }}<br>
+                    GTFS: {{ graph.gtfs_ids|length }} source(s)
+                    <br>
+                    Disponibilité:
+                    {% if graph.gtfs_start %}
+                        {{ graph.gtfs_start|date:"d/m/Y" }} → {{ graph.gtfs_end|date:"d/m/Y" }}
+                    {% else %}
+                        indisponible
+                    {% endif %}
+                </small>
+            </td>
+            <td style="padding: 12px;">
+                {{ graph.created_at|date:"d/m/Y H:i" }}
+            </td>
+            <td style="padding: 12px; text-align: center;">
+                {% if graph.status == "serving" %}
+                    <span style="background: #4caf50; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px;">🟢 Serving</span>
+                {% elif graph.status == "built" %}
+                    <span style="background: #2196f3; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px;">✓ Built</span>
+                {% elif graph.status == "building" %}
+                    <span style="background: #ff9800; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px;">🔨 Building</span>
+                {% elif graph.status == "error" %}
+                    <span style="background: #f44336; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px;">❌ Error</span>
+                {% else %}
+                    <span style="background: #9e9e9e; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px;">{{ graph.status }}</span>
+                {% endif %}
+            </td>
+            <td style="padding: 12px; text-align: center;" class="container-status-{{ graph.id }}">
+                {% if graph.is_serving %}
+                    <span style="color: #4caf50;">🟢 Active</span>
+                {% else %}
+                    <span style="color: #999;">⚫ Inactive</span>
+                {% endif %}
+            </td>
+            <td style="padding: 12px; text-align: center;" class="port-{{ graph.id }}">
+                {% if graph.serve_port %}
+                    <code>{{ graph.serve_port }}</code>
+                {% else %}
+                    <span style="color: #999;">-</span>
+                {% endif %}
+            </td>
+            <td style="padding: 12px; text-align: center;">
+                <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
+                    {% if graph.is_ready %}
+                        {% if graph.is_serving %}
+                                <button class="js-stop" data-graph-id="{{ graph.id }}"
+                                    style="background: #f44336; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                                    title="Arrêter le container">
+                                ⏹ Stop
+                            </button>
+                                <button class="js-restart" data-graph-id="{{ graph.id }}"
+                                    style="background: #ff9800; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                                    title="Redémarrer">
+                                🔄
+                            </button>
+                            <a href="http://localhost:{{ graph.serve_port }}/status" 
+                               target="_blank"
+                               style="background: #2196f3; color: white; border: none; padding: 6px 12px; border-radius: 4px; text-decoration: none; display: inline-block; font-size: 12px;"
+                               title="Voir le status Valhalla">
+                                🔗
+                            </a>
+                            <a href="/graphs/{{ graph.name }}/map/"
+                               style="background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 4px; text-decoration: none; display: inline-block; font-size: 12px;"
+                               title="Voir la carte">
+                                🗺 Carte
+                            </a>
+                        {% else %}
+                                <button class="js-start" data-graph-id="{{ graph.id }}"
+                                    style="background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                                    title="Démarrer le container">
+                                ▶ Start
+                            </button>
+                            <a href="/graphs/{{ graph.name }}/map/"
+                               style="background: #9e9e9e; color: white; border: none; padding: 6px 12px; border-radius: 4px; text-decoration: none; display: inline-block; font-size: 12px;"
+                               title="Voir la carte (container requis)">
+                                🗺 Carte
+                            </a>
+                        {% endif %}
+                    {% endif %}
+                    
+                    <a href="{% url 'graph_logs' graph.id %}" 
+                       style="background: #9e9e9e; color: white; border: none; padding: 6px 12px; border-radius: 4px; text-decoration: none; display: inline-block; font-size: 12px;"
+                       title="Voir les logs">
+                        📄 Logs
+                    </a>
+
+                    <form method="POST" action="{% url 'graph_task_recreate' graph.id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="datetime-local" name="schedule_at" style="font-size:12px; padding:4px;">
+                        <button type="submit" 
+                                style="background: #607d8b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                                title="Recréer ce graph (optionnellement planifié)">
+                            ♻️ Recréer
+                        </button>
+                    </form>
+                    
+                    <form method="POST" action="{% url 'graph_task_delete' graph.id %}" style="display: inline;" onsubmit="return confirm('Supprimer ce graph et son container ?')">
+                        {% csrf_token %}
+                        <button type="submit" 
+                                style="background: #d32f2f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                                title="Supprimer">
+                            🗑
+                        </button>
+                    </form>
+                </div>
+            </td>
+                        <td style="padding: 12px; text-align: center;">
+                                <button onclick="openConfigEditor('{{ graph.name }}')" 
+                                                style="background: #1976d2; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;"
+                                                title="Modifier valhalla_serve.json">
+                                        ⚙️ Config
+                                </button>
+                        </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Config Editor Modal -->
+<div id="configModal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
+    <div style="background: #fff; width: 80%; max-width: 900px; margin: 5% auto; padding: 16px; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.2);">
+        <h3 style="margin-top:0;">Éditer valhalla_serve.json — <span id="configGraphName"></span></h3>
+        <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px;">
+            <strong>Presets:</strong>
+            <button onclick="applyPreset('default')" style="background:#9e9e9e; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Défaut</button>
+            <button onclick="applyPreset('multimodal')" style="background:#1976d2; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Multimodal riche</button>
+            <button onclick="applyPreset('isochrone')" style="background:#43a047; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Isochrone rapide</button>
+            <button onclick="applyPreset('trace')" style="background:#fb8c00; color:#fff; border:none; padding:4px 8px; border-radius:4px;">Trace précise</button>
+            <button onclick="formatJson()" style="background:#455a64; color:#fff; border:none; padding:4px 8px; border-radius:4px; margin-left:auto;">Formater JSON</button>
+        </div>
+        <textarea id="configTextarea" style="width: 100%; height: 400px; font-family: monospace; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; padding: 8px;"></textarea>
+        <div style="margin-top: 12px; display:flex; gap: 8px; align-items: center;">
+            <button onclick="saveConfig(false)" style="background:#43a047; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Sauver</button>
+            <button onclick="saveConfig(true)" style="background:#fb8c00; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Sauver et redémarrer</button>
+            <button onclick="validateConfig()" style="background:#00796b; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Valider</button>
+            <button onclick="showPrevious()" style="background:#673ab7; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Afficher l'ancien</button>
+            <button onclick="exportJson()" style="background:#3f51b5; color:#fff; border:none; padding:6px 12px; border-radius:6px;">Exporter</button>
+            <label style="margin-left:auto; display:inline-block;">
+                <span style="background:#546e7a; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer;">Importer JSON</span>
+                <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJson(event)">
+            </label>
+            <button onclick="closeConfig()" style="background:#9e9e9e; color:#fff; border:none; padding:6px 12px; border-radius:6px; margin-left:auto;">Fermer</button>
+        </div>
+        <div id="configStatus" style="margin-top:8px; color:#555;"></div>
+        <details style="margin-top:8px;">
+            <summary>Afficher l'aide (tooltips)</summary>
+            <ul style="font-size:12px; color:#444;">
+                <li><code>httpd.service.listen</code>: Adresse d'écoute du service (ex: tcp://*:8002).</li>
+                <li><code>loki.actions</code>: Actions autorisées (route, isochrone, status...).</li>
+                <li><code>mjolnir.tile_dir</code>: Dossier des tiles Valhalla.</li>
+                <li><code>mjolnir.tile_extract</code>: Archive des tiles (tar) si utilisée.</li>
+                <li><code>service_limits.*.max_locations</code>: Nombre max de points par requête.</li>
+                <li><code>service_limits.*.max_distance</code>: Distance max acceptée.</li>
+                <li><code>meili.default.*</code>: Options map-matching (gps_accuracy, search_radius...).</li>
+            </ul>
+        </details>
+    </div>
+</div>
+
+<script>
+    let currentGraphName = null;
+    let originalConfigText = '';
+    async function openConfigEditor(name) {
+        currentGraphName = name;
+        document.getElementById('configGraphName').innerText = name;
+        document.getElementById('configStatus').innerText = '';
+        document.getElementById('configTextarea').value = '';
+        document.getElementById('configModal').style.display = 'block';
+        try {
+            const res = await fetch(`/graphs/${name}/config/`);
+            const txt = await res.text();
+            originalConfigText = txt;
+            document.getElementById('configTextarea').value = txt;
+        } catch (e) {
+            document.getElementById('configStatus').innerText = 'Erreur de chargement: ' + e;
+        }
+    }
+    function closeConfig() {
+        document.getElementById('configModal').style.display = 'none';
+    }
+    async function saveConfig(restart) {
+        const statusEl = document.getElementById('configStatus');
+        statusEl.innerText = '';
+        let obj;
+        try {
+            obj = JSON.parse(document.getElementById('configTextarea').value);
+        } catch (e) {
+            statusEl.innerText = 'JSON invalide: ' + e;
+            return;
+        }
+
+        async function validateConfig() {
+            const statusEl = document.getElementById('configStatus');
+            statusEl.innerText = '';
+            let obj;
+            try {
+                obj = JSON.parse(document.getElementById('configTextarea').value);
+            } catch (e) {
+                statusEl.innerText = 'JSON invalide: ' + e;
+                return;
+            }
+            try {
+                const res = await fetch(`/graphs/${currentGraphName}/config/?dry_run=true`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+                    body: JSON.stringify(obj)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusEl.innerText = '✅ Validation OK';
+                } else {
+                    statusEl.innerText = '❌ ' + (data.message || 'Erreur');
+                }
+            } catch (e) {
+                statusEl.innerText = '❌ ' + e;
+            }
+        }
+
+        function showPrevious() {
+            document.getElementById('configTextarea').value = originalConfigText || '';
+            document.getElementById('configStatus').innerText = 'Version précédente affichée';
+        }
+
+        function exportJson() {
+            const blob = new Blob([document.getElementById('configTextarea').value], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `valhalla_serve_${currentGraphName}.json`;
+            a.click();
+        }
+
+        async function importJson(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const text = await file.text();
+            document.getElementById('configTextarea').value = text;
+            document.getElementById('configStatus').innerText = 'Fichier importé';
+        }
+        try {
+            const res = await fetch(`/graphs/${currentGraphName}/config/?restart=${restart ? 'true' : 'false'}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+                body: JSON.stringify(obj)
+            });
+            const data = await res.json();
+            if (data.success) {
+                statusEl.innerText = '✅ Sauvegardé' + (restart ? ' + redémarrage' : '');
+            } else {
+                statusEl.innerText = '❌ ' + (data.message || 'Erreur');
+            }
+        } catch (e) {
+            statusEl.innerText = '❌ ' + e;
+        }
+    }
+
+    function formatJson() {
+        try {
+            const obj = JSON.parse(document.getElementById('configTextarea').value);
+            document.getElementById('configTextarea').value = JSON.stringify(obj, null, 2);
+        } catch (e) {
+            document.getElementById('configStatus').innerText = 'JSON invalide: ' + e;
+        }
+    }
+
+    function applyPreset(name) {
+        let cfg;
+        try {
+            cfg = JSON.parse(document.getElementById('configTextarea').value || '{}');
+        } catch (e) {
+            document.getElementById('configStatus').innerText = 'JSON invalide: ' + e;
+            return;
+        }
+        if (name === 'default') {
+            // reset common limits to sane defaults
+            cfg.service_limits = cfg.service_limits || {};
+            ['auto','bicycle','pedestrian','transit','truck'].forEach(k => {
+                cfg.service_limits[k] = cfg.service_limits[k] || {};
+                cfg.service_limits[k].max_locations = 50;
+            });
+        } else if (name === 'multimodal') {
+            cfg.loki = cfg.loki || {};
+            cfg.loki.actions = [
+                'locate','route','optimized_route','isochrone','trace_route','trace_attributes','transit_available','status'
+            ];
+            cfg.service_limits = cfg.service_limits || {};
+            cfg.service_limits.multimodal = cfg.service_limits.multimodal || {};
+            cfg.service_limits.multimodal.max_locations = 50;
+            cfg.service_limits.pedestrian = cfg.service_limits.pedestrian || {};
+            cfg.service_limits.pedestrian.max_transit_walking_distance = 10000;
+        } else if (name === 'isochrone') {
+            cfg.service_limits = cfg.service_limits || {};
+            cfg.service_limits.isochrone = cfg.service_limits.isochrone || {};
+            cfg.service_limits.isochrone.max_contours = 4;
+            cfg.service_limits.isochrone.max_time_contour = 120;
+            cfg.service_limits.isochrone.max_distance_contour = 200;
+        } else if (name === 'trace') {
+            cfg.meili = cfg.meili || {};
+            cfg.meili.default = cfg.meili.default || {};
+            cfg.meili.default.gps_accuracy = 5.0;
+            cfg.meili.default.search_radius = 50;
+            cfg.meili.default.interpolation_distance = 10;
+        }
+        document.getElementById('configTextarea').value = JSON.stringify(cfg, null, 2);
+        document.getElementById('configStatus').innerText = 'Preset appliqué: ' + name;
+    }
+</script>
+
+<script>
+// Réutiliser les fonctions du dashboard
+function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+}
+
+async function startContainer(taskId) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ Démarrage...';
+        btn.disabled = true;
+        btn.textContent = '⏳ Démarrage...';
+    
+    try {
+        const response = await fetch(`/graphs/task/${taskId}/start/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            alert('Erreur: ' + data.message);
+            btn.disabled = false;
+            btn.textContent = '▶ Start';
+        }
+    } catch (error) {
+        alert('Erreur réseau: ' + error);
+        btn.disabled = false;
+        btn.textContent = '▶ Start';
+    }
+}
+
+async function stopContainer(taskId) {
+    if (!confirm('Arrêter ce container ?')) return;
+    
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳';
+        btn.disabled = true;
+        btn.textContent = '⏳';
+    
+    try {
+        const response = await fetch(`/graphs/task/${taskId}/stop/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            alert('Erreur: ' + data.message);
+            btn.disabled = false;
+            btn.textContent = '⏹ Stop';
+        }
+    } catch (error) {
+        alert('Erreur réseau: ' + error);
+        btn.disabled = false;
+        btn.textContent = '⏹ Stop';
+    }
+}
+
+async function restartContainer(taskId) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳';
+        btn.disabled = true;
+        btn.textContent = '⏳';
+    
+    try {
+        const response = await fetch(`/graphs/task/${taskId}/restart/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Erreur: ' + data.message);
+            btn.disabled = false;
+            btn.textContent = '🔄';
+        }
+    } catch (error) {
+        alert('Erreur réseau: ' + error);
+        btn.disabled = false;
+        btn.textContent = '🔄';
+    }
+}
+
+// Auto-refresh status toutes les 5 secondes
+document.addEventListener('click', (e) => {
+    const btn = e.target;
+    if (btn.matches('.js-start')) {
+        const id = btn.dataset.graphId;
+        startContainer(id, btn);
+    } else if (btn.matches('.js-stop')) {
+        const id = btn.dataset.graphId;
+        stopContainer(id, btn);
+    } else if (btn.matches('.js-restart')) {
+        const id = btn.dataset.graphId;
+        restartContainer(id, btn);
+    }
+});
+setInterval(async () => {
+    const rows = document.querySelectorAll('[data-graph-id]');
+    
+    for (const row of rows) {
+        const graphId = row.dataset.graphId;
+        
+        try {
+            const response = await fetch(`/graphs/task/${graphId}/container-status/`);
+            const data = await response.json();
+            
+            if (data.success && data.status) {
+                const status = data.status;
+                
+                // Update container status
+                const statusCell = row.querySelector(`.container-status-${graphId}`);
+                if (status.running) {
+                    statusCell.innerHTML = '<span style="color: #4caf50;">🟢 Active</span>';
+                } else {
+                    statusCell.innerHTML = '<span style="color: #999;">⚫ Inactive</span>';
+                }
+                
+                // Update port
+                const portCell = row.querySelector(`.port-${graphId}`);
+                if (status.port) {
+                    portCell.innerHTML = `<code>${status.port}</code>`;
+                } else {
+                    portCell.innerHTML = '<span style="color: #999;">-</span>';
+                }
+            }
+        } catch (error) {
+            console.error('Status check error:', error);
+        }
+    }
+}, 5000);
+</script>
+
+{% else %}
+<div style="text-align: center; padding: 60px;">
+    <p style="font-size: 48px; margin: 0;">📦</p>
+    <p style="color: #999; margin-top: 10px;">Aucun graph créé pour le moment.</p>
+    <a href="/graphs/create/" style="display: inline-block; margin-top: 20px; background: #2196f3; color: white; padding: 12px 24px; border-radius: 4px; text-decoration: none;">
+        Créer un nouveau graph
+    </a>
+</div>
+{% endif %}
 
 {% endblock %}
 

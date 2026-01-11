@@ -5,7 +5,8 @@ WORKDIR /app
 
 # Installer les dépendances
 #COPY requirements.txt /app/
-RUN pip install django djangorestframework celery redis psycopg2-binary requests unzip
+RUN pip install django djangorestframework celery redis psycopg2-binary requests unzip docker
+RUN apt-get update && apt-get install -y docker.io
 
 # Copier l'entrypoint
 COPY entrypoint.sh /entrypoint.sh

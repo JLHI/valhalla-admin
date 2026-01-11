@@ -1,62 +1,55 @@
 import requests
-from celery import Celery
 from valhalla_admin.home_widgets import register_widget
-from valhalla_admin.gtfs.models import GtfsSource
-
-# --- Celery Setup ---
-celery_app = Celery("valhalla_admin")
-celery_app.config_from_object("django.conf:settings", namespace="CELERY")
+from valhalla_admin.graph.models import BuildTask
 
 
-# --- Widget 1 : Statut Valhalla ---
+# --- Widget 1 : Statut Valhalla + Graphs ---
 @register_widget
 def valhalla_status(request):
-    """Widget affichant le statut du service Valhalla."""
+    """Widget affichant le statut Valhalla basé sur les graphs servis et un résumé des graphs."""
+    # Dans notre setup, Valhalla est servi par graph via des containers dédiés avec ports dynamiques.
+    # Considérer Valhalla "en ligne" si au moins un graph est en état serving.
     try:
-        response = requests.get("http://valhalla:8002", timeout=1)
-        ok = response.status_code == 200
+        ok = BuildTask.objects.filter(is_serving=True).exists()
     except Exception:
         ok = False
 
-    return {
-        "title": "Statut Valhalla",
-        "content": (
-            "<span style='color:green;'>🟢 En ligne</span>"
-            if ok else
-            "<span style='color:red;'>🔴 Hors ligne</span>"
-        )
-    }
-
-
-# --- Widget 2 : Nombre de sources GTFS ---
-@register_widget
-def gtfs_count(request):
-    """Widget affichant le nombre de sources GTFS."""
-    count = GtfsSource.objects.count()
-
-    return {
-        "title": "Sources GTFS",
-        "content": f"{count} source(s) disponible(s)"
-    }
-
-
-# --- Widget 3 : Statut Celery Worker ---
-@register_widget
-def celery_status(request):
-    """Widget affichant si le worker Celery répond."""
+    # Récupérer les graphs
     try:
-        ping = celery_app.control.ping(timeout=1)
-        ok = len(ping) > 0
+        graphs = BuildTask.objects.order_by("-created_at")[:10]
+        total = BuildTask.objects.count()
     except Exception:
-        ok = False
+        graphs = []
+        total = 0
+
+    def badge(status: str) -> str:
+        if status == "serving":
+            return "<span style='background:#4caf50;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>🟢 serving</span>"
+        if status == "built":
+            return "<span style='background:#2196f3;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>✓ built</span>"
+        if status == "building":
+            return "<span style='background:#ff9800;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>🔨 building</span>"
+        if status == "error":
+            return "<span style='background:#f44336;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>❌ error</span>"
+        return f"<span style='background:#9e9e9e;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;'>{status}</span>"
+
+    rows = []
+    for g in graphs:
+        port = f"<code style='margin-left:6px'>{g.serve_port}</code>" if getattr(g, "serve_port", None) else ""
+        rows.append(f"<li><strong>{g.name}</strong> {badge(g.status)}{port}</li>")
+
+    content = []
+    content.append("<div style='margin-bottom:6px'>" + (
+        "<span style='color:green;'>🟢 Valhalla</span>" if ok else "<span style='color:red;'>🔴 Valhalla</span>"
+    ) + f" — Graphs: {total}</div>")
+    if rows:
+        content.append("<ul style='margin:0;padding-left:16px;font-size:12px'>" + "".join(rows) + "</ul>")
+    else:
+        content.append("<div style='color:#777;font-size:12px'>Aucun graph pour le moment.</div>")
 
     return {
-        "title": "Celery Worker",
-        "content": (
-            "<span style='color:green;'>🟢 Actif</span>"
-            if ok else
-            "<span style='color:red;'>🔴 Inactif</span>"
-        )
+        "title": "Valhalla & Graphs",
+        "content": "".join(content)
     }
 
 @register_widget
@@ -87,67 +80,4 @@ def eu_gtfs_france(request):
     return {
         "title": "GTFS France (EU Portal)",
         "content": content
-    }
-
-@register_widget
-def manage_graphs(request):
-    # 1. Récupérer les GTFS en base
-    gtfs_sources = GtfsSource.objects.all().order_by("name")
-
-    # 2. Récupérer les fichiers OSM disponibles
-    import os
-    OSM_DIR = "/data/osm"   # à ajuster
-    osm_files = []
-    try:
-        if os.path.exists(OSM_DIR):
-            for f in os.listdir(OSM_DIR):
-                if f.endswith(".pbf"):
-                    path = os.path.join(OSM_DIR, f)
-                    size = os.path.getsize(path)
-                    osm_files.append({
-                        "name": f,
-                        "size": round(size / 1024 / 1024, 1),  # MB
-                        "path": path,
-                    })
-    except Exception as e:
-        osm_files = [{"name": "Erreur lecture OSM", "size": 0}]
-
-    # 3. Générer un HTML simple à afficher dans le widget
-    html = "<div>"
-
-    html += "<h4>GTFS disponibles</h4>"
-    html += "<ul>"
-    for g in gtfs_sources:
-        html += f"""
-            <li>
-                <input type='checkbox' name='gtfs' value='{g.source_id}'>
-                <strong>{g.name}</strong>
-                <small>({g.source_id})</small>
-            </li>
-        """
-    html += "</ul>"
-
-    html += "<h4>OSM disponibles</h4>"
-    html += "<ul>"
-    for osm in osm_files:
-        html += f"""
-            <li>
-                <input type='checkbox' name='osm' value='{osm["name"]}'>
-                {osm["name"]} - {osm["size"]} MB
-            </li>
-        """
-    html += "</ul>"
-
-    # Bouton qui appelle une route Django pour créer une BuildTask
-    html += """
-        <button onclick="window.location='/build/graph/start/'">
-             Construire un graphe Valhalla
-        </button>
-    """
-
-    html += "</div>"
-
-    return {
-        "title": "Gérer les graphes Valhalla",
-        "content": html
     }

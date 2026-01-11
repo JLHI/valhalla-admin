@@ -1,3 +1,8 @@
 FROM ghcr.io/valhalla/valhalla:latest
-COPY config/valhalla.json /data/valhalla.json
-CMD ["valhalla_service", "/data/valhalla.json", "1"]
+
+COPY build_graph.sh /usr/local/bin/build_graph.sh
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/build_graph.sh /usr/local/bin/entrypoint.sh
+
+# PID 1: forward build logs to container stdout so `docker logs` works
+CMD ["/usr/local/bin/entrypoint.sh"]
