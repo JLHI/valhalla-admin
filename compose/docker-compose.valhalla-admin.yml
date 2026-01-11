@@ -1,7 +1,10 @@
+version: '3.8'
+
 services:
   valhalla:
     build: ../services/valhalla
-    container_name: valhallaDjango
+    image: valhalla-admin-valhalla:latest
+    container_name: valhalla-admin-valhalla
     volumes:
       - ../data/graphs:/data/graphs
       - ../data/sources:/data/sources:ro
@@ -18,9 +21,10 @@ services:
     build:
       context: ../services/django
       dockerfile: Dockerfile.apache
-    container_name: django
+    image: valhalla-admin-django:latest
+    container_name: valhalla-admin-django
     ports:
-      - "8080:80"
+      - "${DJANGO_PORT:-8081}:80"
     volumes:
       - ../services/django/app:/app
       - ../data/sources:/data/sources
@@ -40,12 +44,12 @@ services:
       timeout: 5s
       retries: 3
 
-
   worker:
     build:
       context: ../services/django
       dockerfile: Dockerfile.apache
-    container_name: celery_worker
+    image: valhalla-admin-worker:latest
+    container_name: valhalla-admin-celery_worker
     command: sh -c "celery -A valhalla_admin worker -l info --concurrency=${CELERY_CONCURRENCY:-1}"
     volumes:
       - ../services/django/app:/app
@@ -53,7 +57,6 @@ services:
       - ../data/graphs:/data/graphs
       - ../data/valhalla:/data/valhalla
       - /var/run/docker.sock:/var/run/docker.sock
-
     env_file:
       - env/django.env
     depends_on:
@@ -71,12 +74,12 @@ services:
       timeout: 5s
       retries: 3
 
-
   scheduler:
     build:
       context: ../services/django
       dockerfile: Dockerfile.apache
-    container_name: celery_scheduler
+    image: valhalla-admin-scheduler:latest
+    container_name: valhalla-admin-celery_scheduler
     command: celery -A valhalla_admin beat -l info
     volumes:
       - ../services/django/app:/app
@@ -94,21 +97,21 @@ services:
 
   redis:
     image: redis:7
-    container_name: redis
+    container_name: valhalla-admin-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6380}:6379"
     restart: unless-stopped
 
   postgres:
     image: postgres:14
-    container_name: postgres
+    container_name: valhalla-admin-postgres
     env_file:
       - env/postgres.env
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - valhalla-admin_postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  valhalla-admin_postgres_data:

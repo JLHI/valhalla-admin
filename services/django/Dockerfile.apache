@@ -3,7 +3,7 @@ FROM python:3.11-slim
 
 # Install Apache, uWSGI, et dépendances
 RUN apt-get update && \
-    apt-get install -y apache2 apache2-dev build-essential && \
+    apt-get install -y apache2 apache2-dev build-essential bash && \
     pip install --no-cache-dir uwsgi
 
 COPY requirements.txt /tmp/requirements.txt
@@ -30,6 +30,8 @@ EXPOSE 80
 
 # Script d'entrée pour lancer uWSGI puis Apache
 COPY entrypoint.sh /entrypoint.sh
+# Ensure Unix line endings and make executable (fix Windows CRLF issues)
+RUN sed -i 's/\r$//' /entrypoint.sh || true
 RUN chmod +x /entrypoint.sh
 
 CMD ["/entrypoint.sh"]
