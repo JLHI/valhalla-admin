@@ -5,6 +5,7 @@
 {% if serve_url %}
 <p>Service Valhalla: <a href="{{ serve_url }}/status" target="_blank">{{ serve_url }}/status</a></p>
 {% endif %}
+    <div style="margin-bottom:10px;color:#1976d2;">Alias : <code>{{ request.get_host }}/valhalla/{{ graph.name }}/graphs/{{ graph.name }}/map/</code></div>
 
 <p style="color:#555; margin-top:4px;">
     GTFS:

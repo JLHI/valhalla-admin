@@ -16,13 +16,14 @@ class BuildTaskSerializer(serializers.ModelSerializer):
 
 
 class StatusView(APIView):
-    def get(self, request):
+    def get(self, request, *args, **kwargs):
+        # graph_alias = kwargs.get('graph_alias')  # utilisable si besoin
         return Response({"status": "ok"})
 
 
 class BuildTaskListView(APIView):
     """List recent BuildTasks with lightweight fields."""
-    def get(self, request):
+    def get(self, request, *args, **kwargs):
         qs = BuildTask.objects.order_by("-created_at")[:50]
         data = BuildTaskSerializer(qs, many=True).data
         return Response({"items": data, "count": len(data)})
@@ -30,7 +31,7 @@ class BuildTaskListView(APIView):
 
 class BuildTaskStatusView(APIView):
     """Return detailed status for a single BuildTask, including logs preview."""
-    def get(self, request, task_id: int):
+    def get(self, request, task_id: int, *args, **kwargs):
         bt = get_object_or_404(BuildTask, id=task_id)
         logs_text = bt.logs or ""
         lines = logs_text.splitlines()

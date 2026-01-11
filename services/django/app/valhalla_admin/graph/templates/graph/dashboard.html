@@ -73,6 +73,10 @@
                 <strong>{{ graph.name }}</strong><br>
                 <small style="color: #666;">{{ graph.created_at|date:"d/m/Y H:i" }}</small>
                 <br>
+                    <small style="color: #1976d2;">
+                        Alias : <code>{{ request.get_host }}/valhalla/{{ graph.name }}/graphs/</code>
+                    </small>
+                    <br>
                 <small style="color: #666;">
                     GTFS:
                     {% if graph.gtfs_start %}

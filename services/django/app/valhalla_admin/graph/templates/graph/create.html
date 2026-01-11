@@ -76,21 +76,22 @@ tr.status-serving  { background: #cff4fc; }
     </div>
     <ul id="zipList" style="font-size:12px; color:#444; margin-top:8px;"></ul>
 
+
     <h3>OSM</h3>
     <ul>
       {% for osm in osm_catalog %}
         <li>
           <label>
-            <input type="radio" name="osm" value="{{ osm.url }}">
+            <input type="checkbox" name="osm" value="{{ osm.url }}">
             {{ osm.region }} — {{ osm.size }} MB
           </label>
         </li>
       {% endfor %}
     </ul>
     <div style="margin-top:8px;">
-      <label style="font-weight:600;">Ou URL OSM (optionnel)</label>
-      <input type="url" name="osm_url" placeholder="https://.../region.osm.pbf" style="width:100%;" />
-      <small style="color:#666;">Si une URL est fournie, elle sera utilisée à la place du choix ci-dessus.</small>
+      <label style="font-weight:600;">Ou URL OSM (optionnel, un ou plusieurs, séparés par des virgules)</label>
+      <input type="text" name="osm_url" placeholder="https://.../region1.osm.pbf,https://.../region2.osm.pbf" style="width:100%;" />
+      <small style="color:#666;">Vous pouvez saisir plusieurs URLs séparées par des virgules. Elles seront ajoutées à la sélection ci-dessus.</small>
     </div>
 
     <h3>Nom du graphe</h3>
@@ -127,7 +128,7 @@ tr.status-serving  { background: #cff4fc; }
 
     async function poll() {
       try {
-        const res = await fetch("{% url 'graph_status' graph.name %}");
+        const res = await fetch("{% url 'graph:graph_status' graph.name %}");
         const data = await res.json();
 
         statusEl.innerText = "Statut : " + data.status;

@@ -1,0 +1,11 @@
+Django>=3.2
+uwsgi
+psycopg2-binary
+celery
+redis
+requests
+djangorestframework
+docker 
+unzip 
+
+

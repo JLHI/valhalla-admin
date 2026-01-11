@@ -15,32 +15,36 @@ services:
     shm_size: 2g
 
   django:
-    build: ../services/django
+    build:
+      context: ../services/django
+      dockerfile: Dockerfile.apache
     container_name: django
-    command: python manage.py runserver 0.0.0.0:8000
     ports:
-      - "8000:8000"
+      - "8080:80"
     volumes:
-    - ../services/django/app:/app
-    - ../data/sources:/data/sources
-    - ../data/graphs:/data/graphs
-    - /var/run/docker.sock:/var/run/docker.sock
-
+      - ../services/django/app:/app
+      - ../data/sources:/data/sources
+      - ../data/graphs:/data/graphs
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - env/django.env
+    environment:
+      - RUN_APACHE=1
     depends_on:
       - postgres
       - redis
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request as u; u.urlopen('http://localhost:8000/').read()\""]
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
 
 
   worker:
-    build: ../services/django
+    build:
+      context: ../services/django
+      dockerfile: Dockerfile.apache
     container_name: celery_worker
     command: sh -c "celery -A valhalla_admin worker -l info --concurrency=${CELERY_CONCURRENCY:-1}"
     volumes:
@@ -69,7 +73,9 @@ services:
 
 
   scheduler:
-    build: ../services/django
+    build:
+      context: ../services/django
+      dockerfile: Dockerfile.apache
     container_name: celery_scheduler
     command: celery -A valhalla_admin beat -l info
     volumes:

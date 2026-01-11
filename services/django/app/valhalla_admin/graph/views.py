@@ -122,9 +122,20 @@ def graph_create(request):
     # ─────────────────────────
     if request.method == "POST":
         graph_name = request.POST.get("graph_name")
-        osm_name = request.POST.get("osm")
-        custom_osm_url = (request.POST.get("osm_url") or "").strip()
+        osm_names = request.POST.getlist("osm")  # plusieurs checkbox possibles
+        custom_osm_urls = (request.POST.get("osm_url") or "").strip()
         selected_gtfs = request.POST.getlist("gtfs")
+
+        # Parse custom URLs (séparées par virgule ou espace)
+        custom_osm_list = []
+        if custom_osm_urls:
+            for part in custom_osm_urls.split(","):
+                url = part.strip()
+                if url:
+                    custom_osm_list.append(url)
+
+        # Fusionner les deux sources (checkbox + URLs)
+        all_osm = osm_names + custom_osm_list
 
         # Sauvegarde des fichiers GTFS uploadés (optionnels)
         uploaded_files = request.FILES.getlist("gtfs_zips")
@@ -136,8 +147,8 @@ def graph_create(request):
             if schedule_dt_local and schedule_dt_local > timezone.now():
                 schedule_eta = to_utc(schedule_dt_local)
 
-        # Utiliser l'URL personnalisée si fournie, sinon la sélection radio
-        osm_value = custom_osm_url if custom_osm_url else osm_name
+        # Stocker la liste sous forme de chaîne séparée par des virgules
+        osm_value = ",".join(all_osm)
 
         if graph_name and osm_value:
             task = BuildTask.objects.create(

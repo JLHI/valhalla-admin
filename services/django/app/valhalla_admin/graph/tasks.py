@@ -174,12 +174,6 @@ def start_valhalla_build(self, task_id):
 
         task.add_log(f"📦 GTFS prêts : {len(feed_dirs)} dossier(s)")
 
-        # Aucun feed → arrêter proprement avant le build
-        if len(feed_dirs) == 0:
-            task.status = "error"
-            task.add_log("❌ Aucun GTFS détecté pour ce build (gtfs_ids vide ou téléchargements échoués). Annulation du build.")
-            _safe_save(task)
-            return
 
         # ─────────────────────────
         # Nettoyage GTFS (désactivé)
@@ -444,13 +438,13 @@ def _safe_save(task: BuildTask, update_fields=None):
                         except Exception:
                             pass
                     fresh.save()
-                # reflect back
-                task.status = fresh.status
-                task.logs = fresh.logs
-                task.output_dir = fresh.output_dir
-                task.is_ready = fresh.is_ready
-                task.is_serving = fresh.is_serving
-                task.serve_port = fresh.serve_port
+                    # reflect back
+                    task.status = fresh.status
+                    task.logs = fresh.logs
+                    task.output_dir = fresh.output_dir
+                    task.is_ready = fresh.is_ready
+                    task.is_serving = fresh.is_serving
+                    task.serve_port = fresh.serve_port
         except Exception:
             pass
 
@@ -495,42 +489,59 @@ def get_osm_file(task):
 
     os.makedirs(OSM_SOURCE_DIR, exist_ok=True)
 
+    # Supporte plusieurs fichiers OSM séparés par des virgules
     osm_value = task.osm_file
+    osm_files = [v.strip() for v in osm_value.split(",") if v.strip()]
+    local_paths = []
+    for osm_val in osm_files:
+        if osm_val.startswith("http"):
+            osm_url = osm_val
+            osm_filename = os.path.basename(urlparse(osm_val).path) or "osm.pbf"
+        else:
+            osm_url = None
+            osm_filename = osm_val
 
-    if osm_value.startswith("http"):
-        osm_url = osm_value
-        osm_filename = os.path.basename(urlparse(osm_value).path) or "osm.pbf"
-    else:
-        osm_url = None
-        osm_filename = osm_value
+        local_path = os.path.join(OSM_SOURCE_DIR, osm_filename)
 
-    local_path = os.path.join(OSM_SOURCE_DIR, osm_filename)
+        if not os.path.exists(local_path):
+            entry = next((e for e in OSM_CATALOG_FR if e["file"] == osm_filename), None)
+            download_url = None
+            if entry:
+                download_url = entry["url"]
+                task.add_log(f"⬇️ Téléchargement OSM (catalogue) : {download_url}")
+            elif osm_url:
+                download_url = osm_url
+                task.add_log(f"⬇️ Téléchargement OSM (URL fournie) : {download_url}")
+            else:
+                raise FileNotFoundError(f"OSM inconnu : {osm_filename}")
 
-    if os.path.exists(local_path):
-        task.add_log("📦 OSM trouvé localement")
-        return local_path
+            r = _fetch_with_retry(download_url, stream=True, timeout=900)
+            r.raise_for_status()
+            with open(local_path, "wb") as f:
+                for chunk in r.iter_content(1024 * 1024):
+                    f.write(chunk)
+            task.add_log(f"✅ OSM téléchargé : {osm_filename}")
+        else:
+            task.add_log(f"📦 OSM trouvé localement : {osm_filename}")
+        local_paths.append(local_path)
 
-    entry = next((e for e in OSM_CATALOG_FR if e["file"] == osm_filename), None)
+    # Si un seul fichier, retour direct
+    if len(local_paths) == 1:
+        return local_paths[0]
 
-    download_url = None
-    if entry:
-        download_url = entry["url"]
-        task.add_log(f"⬇️ Téléchargement OSM (catalogue) : {download_url}")
-    elif osm_url:
-        download_url = osm_url
-        task.add_log(f"⬇️ Téléchargement OSM (URL fournie) : {download_url}")
-    else:
-        raise FileNotFoundError(f"OSM inconnu : {osm_filename}")
-
-    r = _fetch_with_retry(download_url, stream=True, timeout=900)
-    r.raise_for_status()
-
-    with open(local_path, "wb") as f:
-        for chunk in r.iter_content(1024 * 1024):
-            f.write(chunk)
-
-    task.add_log("✅ OSM téléchargé")
-    return local_path
+    # Fusionner plusieurs fichiers avec osmium-tool
+    merged_path = os.path.join(OSM_SOURCE_DIR, f"merged_{task.id}.osm.pbf")
+    import shutil
+    try:
+        osmium_path = shutil.which("osmium") or "/usr/bin/osmium"
+        task.add_log(f"🔀 Fusion de {len(local_paths)} fichiers OSM avec osmium-tool ({osmium_path})...")
+        cmd = [osmium_path, "merge"] + local_paths + ["-o", merged_path]
+        subprocess.run(cmd, check=True)
+        task.add_log(f"✅ Fusion OSM terminée : {merged_path}")
+    except Exception as e:
+        task.add_log(f"❌ Erreur fusion OSM : {e}")
+        raise
+    return merged_path
 
 # ─────────────────────────
 # Internal helpers (retry + log flush)
