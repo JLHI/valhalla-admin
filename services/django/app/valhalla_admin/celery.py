@@ -42,8 +42,9 @@ def on_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs
 		oom_info = ""
 		try:
 			import subprocess
+			container = os.getenv("VALHALLA_BUILD_CONTAINER", os.getenv("VALHALLA_CONTAINER", "valhallaDjango"))
 			dmesg = subprocess.run(
-				["docker", "exec", "valhallaDjango", "dmesg", "-T"],
+				["docker", "exec", container, "dmesg", "-T"],
 				capture_output=True,
 				text=True,
 				timeout=3
