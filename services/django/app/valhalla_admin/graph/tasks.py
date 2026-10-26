@@ -24,6 +24,9 @@ from .utils import OSM_CATALOG_FR
 # ─────────────────────────
 
 GRAPH_ROOT = "/data/graphs"          # /data/graphs/<graph_name>
+
+# Nom du container dans lequel exécuter `build_graph.sh` (configurable)
+VALHALLA_BUILD_CONTAINER = os.getenv("VALHALLA_BUILD_CONTAINER", os.getenv("VALHALLA_CONTAINER", "valhallaDjango"))
 OSM_SOURCE_DIR = "/data/sources/osm"
 
 
@@ -230,7 +233,7 @@ def run_valhalla_build(self, task_id):
 
         cmd = [
             "docker", "exec",
-            "valhallaDjango",
+            VALHALLA_BUILD_CONTAINER,
             "build_graph.sh",
             task.output_dir   # CHEMIN COMPLET
         ]

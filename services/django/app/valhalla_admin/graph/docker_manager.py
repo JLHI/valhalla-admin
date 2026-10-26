@@ -1,21 +1,62 @@
+"""Module de gestion des containers Valhalla via Docker API.
+
+Objectif : créer/démarrer des containers "graph" dans le BON projet Compose (ici `valhalla-admin`).
+
+Docker Desktop regroupe les containers par label `com.docker.compose.project`.
+Si on crée un container via l'API Docker sans ces labels, il n'apparaît pas dans le "projet".
 """
-Module de gestion des containers Valhalla via Docker API
-"""
+
 import docker
+import os
 from docker.errors import NotFound, APIError
 from typing import Optional, Dict, List
 
 
 class ValhallaDockerManager:
     """Gestionnaire de containers Valhalla"""
-    
+
     CONTAINER_PREFIX = "valhalla-graph-"
-    NETWORK_NAME = "compose_default"
-    VALHALLA_IMAGE = "compose-valhalla:latest"
-    BASE_PORT = 8002
     
     def __init__(self):
         self.client = docker.from_env()
+
+        # Déterminer le "projet" Compose cible.
+        self.project_name = self._detect_compose_project_name()
+
+        # Valeurs configurables, mais avec des defaults cohérents.
+        self.network_name = os.getenv("VALHALLA_NETWORK", f"{self.project_name}_default")
+        self.valhalla_image = os.getenv("VALHALLA_IMAGE", f"{self.project_name}-valhalla:latest")
+        self.base_port = int(os.getenv("VALHALLA_BASE_PORT", "8002"))
+
+    def _detect_compose_project_name(self) -> str:
+        """Détecte le projet Compose à utiliser.
+
+        Ordre:
+        1) `VALHALLA_COMPOSE_PROJECT`
+        2) labels du conteneur courant (Django/worker) via Docker API
+        3) `COMPOSE_PROJECT_NAME` / `PROJECT_NAME`
+        4) fallback `valhalla-admin`
+        """
+        explicit = os.getenv("VALHALLA_COMPOSE_PROJECT")
+        if explicit:
+            return explicit
+
+        # Essayer de lire les labels de CE conteneur (fonctionne si /var/run/docker.sock est monté)
+        try:
+            container_id = (os.getenv("HOSTNAME") or "").strip()
+            if container_id:
+                me = self.client.containers.get(container_id)
+                project = (me.labels or {}).get("com.docker.compose.project")
+                if project:
+                    return project
+        except Exception:
+            pass
+
+        env_project = os.getenv("COMPOSE_PROJECT_NAME") or os.getenv("PROJECT_NAME")
+        if env_project:
+            return env_project
+
+        return "valhalla-admin"
     
     def get_container_name(self, graph_name: str) -> str:
         """Retourne le nom du container pour un graph"""
@@ -64,7 +105,7 @@ class ValhallaDockerManager:
             # Si l'inspection échoue, on tombera sur BASE_PORT
             pass
 
-        port = self.BASE_PORT
+        port = self.base_port
         while port in used_ports:
             port += 1
         return port
@@ -75,8 +116,28 @@ class ValhallaDockerManager:
         En inspectant les volumes montés du worker
         """
         try:
-            # Récupérer le container worker
-            worker = self.client.containers.get("celery_worker")
+            # 1) Si un nom est fourni explicitement, on l'utilise
+            worker_container_name = os.getenv("CELERY_WORKER_CONTAINER")
+
+            # 2) Sinon, on cherche le container par labels compose (robuste, même si container_name change)
+            if not worker_container_name:
+                candidates = self.client.containers.list(
+                    all=True,
+                    filters={
+                        "label": [
+                            f"com.docker.compose.project={self.project_name}",
+                            "com.docker.compose.service=worker",
+                        ]
+                    },
+                )
+                if candidates:
+                    worker_container_name = candidates[0].name
+
+            # 3) Fallback (nom historique)
+            if not worker_container_name:
+                worker_container_name = f"{self.project_name}-celery_worker"
+
+            worker = self.client.containers.get(worker_container_name)
             
             # Chercher le mount correspondant à /data/graphs
             for mount in worker.attrs["Mounts"]:
@@ -167,10 +228,10 @@ class ValhallaDockerManager:
         
         # Vérifier que l'image existe, sinon la pull
         try:
-            self.client.images.get(self.VALHALLA_IMAGE)
+            self.client.images.get(self.valhalla_image)
         except NotFound:
             try:
-                self.client.images.pull(self.VALHALLA_IMAGE)
+                self.client.images.pull(self.valhalla_image)
             except APIError as e:
                 return {
                     "status": "error",
@@ -179,24 +240,36 @@ class ValhallaDockerManager:
         
         # Créer et démarrer le container
         try:
+            # Valhalla a besoin d'un fichier JSON de configuration.
+            # Certains flows génèrent `valhalla_serve.json`, d'autres seulement `valhalla.json`.
+            # Pour être robuste, on choisit le meilleur fichier disponible au runtime.
+            start_cmd = (
+                "set -e; "
+                "if [ -f /data/valhalla/valhalla_serve.json ]; then CFG=/data/valhalla/valhalla_serve.json; "
+                "elif [ -f /data/valhalla/valhalla.json ]; then CFG=/data/valhalla/valhalla.json; "
+                "else echo 'Missing Valhalla config: valhalla_serve.json or valhalla.json' >&2; "
+                "ls -la /data/valhalla >&2; exit 2; fi; "
+                "exec valhalla_service \"$CFG\" 1"
+            )
+
             container = self.client.containers.run(
-                image=self.VALHALLA_IMAGE,
+                image=self.valhalla_image,
                 name=container_name,
                 detach=True,
-                command=[
-                    "valhalla_service",
-                    "/data/valhalla/valhalla_serve.json",  # Utiliser la version corrigée
-                    "1"  # nombre de threads
-                ],
+                command=["bash", "-lc", start_cmd],
                 ports={"8002/tcp": port},
                 volumes={
-                    host_graph_path: {"bind": "/data/valhalla", "mode": "rw"}  # rw pour créer valhalla_serve.json
+                    host_graph_path: {"bind": "/data/valhalla", "mode": "rw"}
                 },
                 labels={
                     "valhalla.graph": graph_name,
-                    "valhalla.managed": "true"
+                    "valhalla.managed": "true",
+
+                    # Pour que Docker Desktop groupe ce container dans le bon "projet"
+                    "com.docker.compose.project": self.project_name,
+                    "com.docker.compose.service": "valhalla-graph",
                 },
-                network=self.NETWORK_NAME,
+                network=self.network_name,
                 restart_policy={"Name": "unless-stopped"},
                 healthcheck={
                     "test": ["CMD", "curl", "-f", "http://localhost:8002/status"],
@@ -390,11 +463,11 @@ class ValhallaDockerManager:
         try:
             # Déconnecter si déjà lié (au besoin, ignore les erreurs)
             try:
-                self.client.api.disconnect_container_from_network(container_name, self.NETWORK_NAME)
+                self.client.api.disconnect_container_from_network(container_name, self.network_name)
             except Exception:
                 pass
             # Reconnecter au réseau courant
-            self.client.api.connect_container_to_network(container_name, self.NETWORK_NAME)
+            self.client.api.connect_container_to_network(container_name, self.network_name)
         except Exception as e:
             raise e
     
