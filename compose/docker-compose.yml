@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   valhalla:
     build: ../services/valhalla
@@ -115,3 +113,5 @@ services:
 
 volumes:
   valhalla-admin_postgres_data:
+    # Volume existant contenant les données (créé à l'époque sous le projet "compose")
+    name: compose_postgres_data
