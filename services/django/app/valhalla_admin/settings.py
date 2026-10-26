@@ -83,3 +83,10 @@ CELERY_TIMEZONE = TIME_ZONE
 
 # External APIs
 GTFS_SOURCE_API_URL = os.getenv("GTFS_SOURCE_API_URL", "https://transport.data.gouv.fr/api/datasets?format=gtfs")
+
+# Proxy tuiles OSM (voir valhalla_admin/tiles.py)
+OSM_TILE_CACHE_DIR = os.getenv("OSM_TILE_CACHE_DIR", "/data/tiles")
+OSM_TILE_CACHE_TTL = int(os.getenv("OSM_TILE_CACHE_TTL", 7 * 24 * 3600))
+OSM_TILE_USER_AGENT = os.getenv("OSM_TILE_USER_AGENT", "valhalla-admin/1.0")
+# Vide : origine de la requête entrante (ex. http://localhost:8080/)
+OSM_TILE_REFERER = os.getenv("OSM_TILE_REFERER", "")

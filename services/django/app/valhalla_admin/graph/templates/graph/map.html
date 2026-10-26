@@ -141,7 +141,8 @@
     const stopsUrlBase = `/graphs/${name}/stops.geojson`;
     const map = L.map('map');
 
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Tuiles OSM via le proxy Django (Referer/User-Agent + cache disque), cf. valhalla_admin/tiles.py
+    const osm = L.tileLayer('/tiles/osm/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);

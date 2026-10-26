@@ -1,7 +1,7 @@
 services:
   valhalla:
     build: ../services/valhalla
-    container_name: valhallaDjango
+    container_name: valhalla
     volumes:
       - ../data/graphs:/data/graphs
       - ../data/sources:/data/sources:ro
@@ -25,6 +25,7 @@ services:
       - ../services/django/app:/app
       - ../data/sources:/data/sources
       - ../data/graphs:/data/graphs
+      - ../data/tiles:/data/tiles
       - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - env/django.env

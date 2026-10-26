@@ -43,7 +43,7 @@ def on_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs
 		try:
 			import subprocess
 			dmesg = subprocess.run(
-				["docker", "exec", "valhallaDjango", "dmesg", "-T"],
+				["docker", "exec", "valhalla", "dmesg", "-T"],
 				capture_output=True,
 				text=True,
 				timeout=3

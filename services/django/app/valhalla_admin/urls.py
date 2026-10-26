@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include, re_path
 from .views import home, AdminLogin
+from .tiles import osm_tile
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from valhalla_admin.gtfs.views import add_gtfs_from_eu
 
@@ -11,6 +12,7 @@ urlpatterns = [
     path("admin/login/", AdminLogin.as_view(), name="admin_login"),
     path("admin/", admin.site.urls),
     path("", home, name="home"),
+    path("tiles/osm/<int:z>/<int:x>/<int:y>.png", osm_tile, name="osm_tile"),
 ]
 
 
